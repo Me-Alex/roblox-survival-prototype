@@ -1,0 +1,22 @@
+# Roblox Studio local state and generated place builds
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
+build/
+
+# Rojo and Roblox tooling cache/output
+.rojo/
+sourcemap.json
+*.profraw
+coverage.out
+profile.out
+trace.json
+callgrind.out
+
+# Editor and OS noise
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+.DS_Store

@@ -1,0 +1,23 @@
+{
+  "name": "roblox-survival-prototype",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "Shared": {
+        "$path": "src/shared"
+      }
+    },
+    "ServerScriptService": {
+      "SurvivalServer": {
+        "$path": "src/server"
+      }
+    },
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "SurvivalClient": {
+          "$path": "src/client"
+        }
+      }
+    }
+  }
+}
