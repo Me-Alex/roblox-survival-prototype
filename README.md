@@ -9,6 +9,7 @@ A Rojo-compatible Roblox survival game prototype with resource gathering, hunger
 - Harvestable trees, rocks, fiber plants, berry bushes, herb patches, and abandoned caches using `ProximityPrompt`.
 - Biome-weighted resource clusters that push players to scout forests, wetlands, cliff zones, camps, and iron-rich highlands.
 - Server-owned inventory with client synchronization.
+- Inventory items mirrored as real Roblox Backpack tools with visible handles and server-validated actions.
 - Hunger, thirst, and temperature drain over time.
 - Damage from starvation, dehydration, and severe temperature exposure.
 - Dynamic weather that changes survival pressure through rain, storms, cold fronts, and heat waves.
@@ -71,6 +72,7 @@ This repository is designed to live on GitHub as source code. Clone it on anothe
 - Gather wood, stone, fiber, and berries.
 - Follow trails to discover named regions and complete `Scout The Island`.
 - Craft a `Stone Axe`, then compare wood/fiber gathering speed.
+- Use Backpack tools to hold resources, eat food, equip weapons, attack, and place build kits.
 - Craft a `Spear` before nightfall.
 - Equip crafted weapons and armor from the `GEAR` panel.
 - Craft and place a `Campfire Kit` before night.

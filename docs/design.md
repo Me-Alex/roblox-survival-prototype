@@ -38,6 +38,7 @@ The player wakes up in a small wilderness area and has to survive the first nigh
 - `WorldService`: regional map, spawn, landmarks, lighting, day/night, discovery tracking, and structure proximity checks.
 - `ResourceService`: biome-weighted resource spawning and prompt-driven harvesting.
 - `InventoryService`: server inventory state, item usage, and remote sync.
+- `ItemToolService`: mirrors server inventory into tangible Roblox Backpack tools and routes tool actions back through server validation.
 - `CraftingService`: recipe validation, crafting, and structure placement.
 - `VitalsService`: hunger, thirst, temperature, and survival damage.
 - `ProgressionService`: XP, levels, and level-up notifications.
@@ -59,6 +60,7 @@ The player wakes up in a small wilderness area and has to survive the first nigh
 - Threat builds through dangerous nights and signal beacon upgrades, then turns into raids.
 - Defeated enemies drop raw meat and hide, feeding the cooking and armor loops.
 - Gear must be equipped to count in combat, and equipment durability creates long-run resource pressure.
+- Inventory items are represented by real Tool objects, so players can hold resources, activate consumables, equip weapons and armor, and place build kits from the Roblox Backpack.
 - Bleeding and poison make medical crafting matter beyond simple health restoration.
 - Workbench and forge structures create a midgame station loop.
 - Iron ore and ingots introduce a second gear tier with level requirements.

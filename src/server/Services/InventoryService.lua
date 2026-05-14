@@ -86,6 +86,13 @@ end
 
 function InventoryService.send(player)
 	Remotes.get("InventoryUpdated"):FireClient(player, InventoryService.getInventory(player))
+
+	if context and context.ItemToolService then
+		local itemToolService = context.ItemToolService
+		task.defer(function()
+			itemToolService.syncPlayerTools(player)
+		end)
+	end
 end
 
 function InventoryService.addItem(player, itemId, amount)

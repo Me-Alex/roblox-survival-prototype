@@ -15,6 +15,7 @@ context.ProgressionService = require(servicesFolder.ProgressionService)
 context.ObjectiveService = require(servicesFolder.ObjectiveService)
 context.ResourceService = require(servicesFolder.ResourceService)
 context.CraftingService = require(servicesFolder.CraftingService)
+context.ItemToolService = require(servicesFolder.ItemToolService)
 context.EnemyService = require(servicesFolder.EnemyService)
 context.CombatService = require(servicesFolder.CombatService)
 
@@ -26,6 +27,7 @@ local startupOrder = {
 	context.ObjectiveService,
 	context.ResourceService,
 	context.CraftingService,
+	context.ItemToolService,
 	context.EnemyService,
 	context.CombatService,
 }
