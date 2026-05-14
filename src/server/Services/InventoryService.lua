@@ -20,17 +20,11 @@ end
 
 local function getOrCreate(player)
 	if not inventories[player] then
-		inventories[player] = {
-			Wood = 0,
-			Stone = 0,
-			Fiber = 0,
-			Berries = 0,
-			CookedBerries = 0,
-			Bandage = 0,
-			StoneAxe = 0,
-			CampfireKit = 0,
-			ShelterKit = 0,
-		}
+		inventories[player] = {}
+
+		for itemId in pairs(Config.Items) do
+			inventories[player][itemId] = 0
+		end
 	end
 
 	return inventories[player]
@@ -50,6 +44,10 @@ function InventoryService.addItem(player, itemId, amount)
 	local items = getOrCreate(player)
 	items[itemId] = math.max(0, (items[itemId] or 0) + amount)
 	InventoryService.send(player)
+
+	if amount > 0 and context and context.ObjectiveService then
+		context.ObjectiveService.recordCollected(player, itemId, amount)
+	end
 end
 
 function InventoryService.hasItem(player, itemId, amount)

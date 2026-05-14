@@ -95,6 +95,51 @@ local function createShelter(cframe)
 	return model
 end
 
+local function createRainCollector(cframe)
+	local model = Instance.new("Model")
+	model.Name = "RainCollector"
+
+	local stand = Instance.new("Part")
+	stand.Name = "Stand"
+	stand.Anchored = true
+	stand.Size = Vector3.new(4, 3, 4)
+	stand.CFrame = cframe * CFrame.new(0, 1.3, 0)
+	stand.Color = Color3.fromRGB(94, 67, 45)
+	stand.Material = Enum.Material.Wood
+	stand.Parent = model
+
+	local basin = Instance.new("Part")
+	basin.Name = "Basin"
+	basin.Anchored = true
+	basin.Size = Vector3.new(7, 1, 7)
+	basin.CFrame = cframe * CFrame.new(0, 3.1, 0)
+	basin.Color = Color3.fromRGB(78, 145, 162)
+	basin.Material = Enum.Material.Glass
+	basin.Transparency = 0.18
+	basin.Parent = model
+
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = "DrinkPrompt"
+	prompt.ActionText = "Drink"
+	prompt.ObjectText = "Rain Collector"
+	prompt.HoldDuration = 0.35
+	prompt.MaxActivationDistance = 10
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = basin
+
+	prompt.Triggered:Connect(function(player)
+		if context and context.VitalsService then
+			context.VitalsService.applyConsumable(player, {
+				Thirst = Config.Buildables.RainCollectorKit.DrinkThirst,
+			})
+			notify(player, "You drank stored rainwater.")
+		end
+	end)
+
+	model.PrimaryPart = stand
+	return model
+end
+
 local function missingItemMessage(itemId)
 	local itemConfig = Config.Items[itemId]
 	local displayName = itemConfig and itemConfig.DisplayName or itemId
@@ -126,6 +171,9 @@ function CraftingService.craft(player, recipeId)
 
 	context.InventoryService.removeItems(player, recipe.Cost)
 	context.InventoryService.addItem(player, recipe.Result, recipe.Amount or 1)
+	if context.ObjectiveService then
+		context.ObjectiveService.recordCrafted(player, recipe.Result, recipe.Amount or 1)
+	end
 	notify(player, string.format("Crafted %s.", recipe.DisplayName))
 
 	return true, "Crafted."
@@ -154,6 +202,8 @@ function CraftingService.build(player, itemId)
 		model = createCampfire(cframe)
 	elseif itemId == "ShelterKit" then
 		model = createShelter(cframe)
+	elseif itemId == "RainCollectorKit" then
+		model = createRainCollector(cframe)
 	end
 
 	if not model then
@@ -162,6 +212,9 @@ function CraftingService.build(player, itemId)
 
 	context.InventoryService.removeItems(player, { [itemId] = 1 })
 	model.Parent = context.WorldService.getStructuresFolder()
+	if context.ObjectiveService then
+		context.ObjectiveService.recordBuilt(player, model.Name)
+	end
 
 	if buildable.LifetimeSeconds and buildable.LifetimeSeconds > 0 then
 		Debris:AddItem(model, buildable.LifetimeSeconds)

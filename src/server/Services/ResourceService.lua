@@ -15,6 +15,7 @@ local RESOURCE_COLORS = {
 	Rock = Color3.fromRGB(116, 120, 128),
 	FiberPlant = Color3.fromRGB(87, 138, 73),
 	BerryBush = Color3.fromRGB(55, 116, 72),
+	WaterSpring = Color3.fromRGB(74, 167, 205),
 }
 
 local function randomGroundPosition()
@@ -155,6 +156,36 @@ local function createBerryBush(position)
 	model.Parent = resourcesFolder
 end
 
+local function createWaterSpring(position)
+	local model = Instance.new("Model")
+	model.Name = "WaterSpring"
+
+	local water = Instance.new("Part")
+	water.Name = "Water"
+	water.Anchored = true
+	water.Shape = Enum.PartType.Cylinder
+	water.Size = Vector3.new(7, 1, 7)
+	water.CFrame = CFrame.new(position + Vector3.new(0, 0.35, 0)) * CFrame.Angles(0, 0, math.rad(90))
+	water.Color = RESOURCE_COLORS.WaterSpring
+	water.Material = Enum.Material.Glass
+	water.Transparency = 0.25
+	water.Parent = model
+
+	local rim = Instance.new("Part")
+	rim.Name = "StoneRim"
+	rim.Anchored = true
+	rim.Shape = Enum.PartType.Cylinder
+	rim.Size = Vector3.new(8, 0.7, 8)
+	rim.CFrame = CFrame.new(position + Vector3.new(0, 0.25, 0)) * CFrame.Angles(0, 0, math.rad(90))
+	rim.Color = Color3.fromRGB(93, 96, 94)
+	rim.Material = Enum.Material.Slate
+	rim.Parent = model
+
+	model.PrimaryPart = water
+	createPrompt(water, "WaterSpring", Config.Resources.WaterSpring)
+	model.Parent = resourcesFolder
+end
+
 local function spawnResource(resourceId)
 	local position = randomGroundPosition()
 
@@ -166,6 +197,8 @@ local function spawnResource(resourceId)
 		createFiberPlant(position)
 	elseif resourceId == "BerryBush" then
 		createBerryBush(position)
+	elseif resourceId == "WaterSpring" then
+		createWaterSpring(position)
 	end
 end
 
@@ -175,8 +208,25 @@ function ResourceService.harvest(player, model, resourceId)
 		return
 	end
 
-	local inventory = context.InventoryService
 	local amount = random:NextInteger(resourceConfig.MinAmount, resourceConfig.MaxAmount)
+
+	if resourceConfig.Thirst then
+		context.VitalsService.applyConsumable(player, {
+			Thirst = resourceConfig.Thirst,
+		})
+		Remotes.get("Notification"):FireClient(player, string.format("+%d thirst", resourceConfig.Thirst))
+		setModelVisible(model, false)
+
+		task.delay(resourceConfig.RespawnSeconds, function()
+			if model and model.Parent then
+				setModelVisible(model, true)
+			end
+		end)
+
+		return
+	end
+
+	local inventory = context.InventoryService
 
 	if inventory.hasItem(player, "StoneAxe", 1) and (resourceId == "Tree" or resourceId == "FiberPlant") then
 		amount += 1

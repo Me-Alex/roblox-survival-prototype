@@ -20,7 +20,10 @@ The player wakes up in a small wilderness area and has to survive the first nigh
 - Eat
 - Heal
 - Build
+- Attack
+- Hunt
 - Seek warmth
+- Find water
 - Survive nightfall
 
 ## Current Prototype Systems
@@ -30,14 +33,25 @@ The player wakes up in a small wilderness area and has to survive the first nigh
 - `InventoryService`: server inventory state, item usage, and remote sync.
 - `CraftingService`: recipe validation, crafting, and structure placement.
 - `VitalsService`: hunger, thirst, temperature, and survival damage.
+- `EnemyService`: night stalker spawning, pursuit, attacks, damage scaling, drops, and cleanup.
+- `CombatService`: server-validated player attacks and weapon selection.
+- `ObjectiveService`: per-player progression goals and reward grants.
 - `SurvivalClient`: HUD, notifications, inventory actions, and crafting controls.
+
+## Added Gameplay Depth
+
+- Weather changes every few minutes and affects temperature, hunger drain, thirst drain, and enemy pressure.
+- Water springs and rain collectors make thirst management more active than eating berries.
+- Night stalkers create a reason to prepare before dark with weapons, armor, fire, and food.
+- Defeated enemies drop raw meat and hide, feeding the cooking and armor loops.
+- Objectives teach the survival loop and reward useful items without requiring a separate tutorial screen.
 
 ## Next Production Steps
 
 - Add DataStore-backed saves for inventory, unlocked recipes, and survival days.
 - Replace runtime primitive models with polished Roblox assets.
 - Add hostile weather, storms, and biome-specific temperature rules.
-- Add enemy AI or wildlife after the survival loop feels stable.
-- Add water sources and cooking stations instead of using berries as the first thirst item.
+- Add wildlife, ranged weapons, and enemy patrol zones after the first combat playtest.
+- Add dedicated cooking stations and spoilage timers.
 - Add anti-exploit validation for placement distance, harvest cooldowns, and impossible inventory changes.
 - Tune depletion rates around a target first session length of 10 to 15 minutes.

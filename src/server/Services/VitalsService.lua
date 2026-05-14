@@ -25,10 +25,18 @@ end
 local function sendVitals(player)
 	local vitals = vitalsByPlayer[player]
 	if vitals then
+		local humanoid = getHumanoid(player)
+		local healthPercent = 100
+
+		if humanoid and humanoid.MaxHealth > 0 then
+			healthPercent = (humanoid.Health / humanoid.MaxHealth) * 100
+		end
+
 		Remotes.get("VitalsUpdated"):FireClient(player, {
 			Hunger = math.floor(vitals.Hunger + 0.5),
 			Thirst = math.floor(vitals.Thirst + 0.5),
 			Temperature = math.floor(vitals.Temperature + 0.5),
+			Health = math.floor(healthPercent + 0.5),
 		})
 	end
 end
@@ -77,9 +85,12 @@ local function updatePlayer(player)
 	local vitals = ensureVitals(player)
 	local world = context and context.WorldService
 	local targetTemperature = world and world.getAmbientTemperature(player) or 72
+	local weather = world and world.getCurrentWeatherConfig() or nil
+	local hungerMultiplier = weather and weather.HungerMultiplier or 1
+	local thirstMultiplier = weather and weather.ThirstMultiplier or 1
 
-	vitals.Hunger = clampVital(vitals.Hunger - Config.Vitals.HungerLoss)
-	vitals.Thirst = clampVital(vitals.Thirst - Config.Vitals.ThirstLoss)
+	vitals.Hunger = clampVital(vitals.Hunger - (Config.Vitals.HungerLoss * hungerMultiplier))
+	vitals.Thirst = clampVital(vitals.Thirst - (Config.Vitals.ThirstLoss * thirstMultiplier))
 	vitals.Temperature += (targetTemperature - vitals.Temperature) * Config.Vitals.TemperatureDrift
 	vitals.Temperature = math.clamp(vitals.Temperature, 0, 120)
 

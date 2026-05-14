@@ -6,10 +6,13 @@ local FOLDER_NAME = "SurvivalRemotes"
 local DEFINITIONS = {
 	InventoryUpdated = "RemoteEvent",
 	VitalsUpdated = "RemoteEvent",
+	WorldStateUpdated = "RemoteEvent",
+	ObjectiveUpdated = "RemoteEvent",
 	Notification = "RemoteEvent",
 	CraftRequest = "RemoteFunction",
 	ConsumeRequest = "RemoteFunction",
 	BuildRequest = "RemoteFunction",
+	AttackRequest = "RemoteFunction",
 	GetInventory = "RemoteFunction",
 }
 

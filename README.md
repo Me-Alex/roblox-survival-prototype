@@ -9,9 +9,16 @@ A Rojo-compatible Roblox survival game prototype with resource gathering, hunger
 - Server-owned inventory with client synchronization.
 - Hunger, thirst, and temperature drain over time.
 - Damage from starvation, dehydration, and severe temperature exposure.
+- Dynamic weather that changes survival pressure through rain, storms, cold fronts, and heat waves.
+- Drinkable water springs and placeable rain collectors.
+- Night stalkers that spawn after dark, chase players, attack, and drop hide/raw meat.
+- Server-validated attack action with fists, stone axe, and spear damage tiers.
+- Objective progression with rewards for gathering, crafting, building, hunting, and surviving the night.
 - Crafting for tools, food, bandages, campfires, and shelter kits.
+- Expanded crafting for spear, hide armor, cooked meat, survival tonic, and rain collectors.
 - Placeable campfires and shelters that affect night-time survival.
 - Client HUD for vitals, inventory, consumables, buildables, crafting, and notifications.
+- World HUD for day/time/weather, objective tracker, and an attack button.
 
 ## Project Layout
 
@@ -54,7 +61,11 @@ This repository is designed to live on GitHub as source code. Clone it on anothe
 
 - Gather wood, stone, fiber, and berries.
 - Craft a `Stone Axe`, then compare wood/fiber gathering speed.
+- Craft a `Spear` before nightfall.
 - Craft and place a `Campfire Kit` before night.
 - Stand near the campfire at night and watch temperature stabilize.
+- Fight night stalkers with `F` or the `Attack` button.
+- Cook dropped `Raw Meat` near a campfire.
 - Craft `Cooked Berries` near the campfire and use them from the HUD.
 - Build a shelter and verify cold exposure is less punishing nearby.
+- Place a `Rain Collector Kit` and use it as backup drinking water.

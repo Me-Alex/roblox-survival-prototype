@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
+local UserInputService = game:GetService("UserInputService")
 
 local Config = require(ReplicatedStorage.Shared.SurvivalConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -13,6 +14,17 @@ local vitals = {
 	Hunger = 100,
 	Thirst = 100,
 	Temperature = 72,
+	Health = 100,
+}
+local worldState = {
+	Day = 1,
+	Clock = "09:00",
+	Weather = "Clear",
+	IsNight = false,
+}
+local objectiveSnapshot = {
+	Objectives = {},
+	Counters = {},
 }
 
 local screenGui = Instance.new("ScreenGui")
@@ -33,7 +45,7 @@ vitalsPanel.BackgroundColor3 = Color3.fromRGB(24, 28, 30)
 vitalsPanel.BackgroundTransparency = 0.12
 vitalsPanel.BorderSizePixel = 0
 vitalsPanel.Position = UDim2.fromOffset(18, 18)
-vitalsPanel.Size = UDim2.fromOffset(270, 112)
+vitalsPanel.Size = UDim2.fromOffset(270, 136)
 vitalsPanel.Parent = root
 
 local vitalsCorner = Instance.new("UICorner")
@@ -70,6 +82,73 @@ local inventoryTitle = title:Clone()
 inventoryTitle.Name = "InventoryTitle"
 inventoryTitle.Text = "GEAR"
 inventoryTitle.Parent = inventoryPanel
+
+local worldPanel = Instance.new("Frame")
+worldPanel.Name = "World"
+worldPanel.AnchorPoint = Vector2.new(1, 0)
+worldPanel.BackgroundColor3 = Color3.fromRGB(24, 28, 30)
+worldPanel.BackgroundTransparency = 0.12
+worldPanel.BorderSizePixel = 0
+worldPanel.Position = UDim2.new(1, -18, 0, 18)
+worldPanel.Size = UDim2.fromOffset(250, 92)
+worldPanel.Parent = root
+
+local worldCorner = Instance.new("UICorner")
+worldCorner.CornerRadius = UDim.new(0, 8)
+worldCorner.Parent = worldPanel
+
+local worldTitle = title:Clone()
+worldTitle.Name = "WorldTitle"
+worldTitle.Text = "WORLD"
+worldTitle.Parent = worldPanel
+
+local worldDetails = Instance.new("TextLabel")
+worldDetails.Name = "WorldDetails"
+worldDetails.BackgroundTransparency = 1
+worldDetails.Font = Enum.Font.GothamMedium
+worldDetails.TextColor3 = Color3.fromRGB(235, 238, 229)
+worldDetails.TextSize = 13
+worldDetails.TextWrapped = true
+worldDetails.TextXAlignment = Enum.TextXAlignment.Left
+worldDetails.TextYAlignment = Enum.TextYAlignment.Top
+worldDetails.Position = UDim2.fromOffset(14, 36)
+worldDetails.Size = UDim2.new(1, -28, 1, -46)
+worldDetails.Parent = worldPanel
+
+local objectivePanel = Instance.new("Frame")
+objectivePanel.Name = "Objectives"
+objectivePanel.BackgroundColor3 = Color3.fromRGB(24, 28, 30)
+objectivePanel.BackgroundTransparency = 0.12
+objectivePanel.BorderSizePixel = 0
+objectivePanel.Position = UDim2.fromOffset(18, 168)
+objectivePanel.Size = UDim2.fromOffset(330, 230)
+objectivePanel.Parent = root
+
+local objectiveCorner = Instance.new("UICorner")
+objectiveCorner.CornerRadius = UDim.new(0, 8)
+objectiveCorner.Parent = objectivePanel
+
+local objectiveTitle = title:Clone()
+objectiveTitle.Name = "ObjectiveTitle"
+objectiveTitle.Text = "OBJECTIVES"
+objectiveTitle.Parent = objectivePanel
+
+local objectiveList = Instance.new("ScrollingFrame")
+objectiveList.Name = "ObjectiveList"
+objectiveList.Active = true
+objectiveList.BackgroundTransparency = 1
+objectiveList.BorderSizePixel = 0
+objectiveList.Position = UDim2.fromOffset(12, 38)
+objectiveList.ScrollBarThickness = 6
+objectiveList.Size = UDim2.new(1, -24, 1, -50)
+objectiveList.CanvasSize = UDim2.fromOffset(0, 0)
+objectiveList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+objectiveList.Parent = objectivePanel
+
+local objectiveLayout = Instance.new("UIListLayout")
+objectiveLayout.Padding = UDim.new(0, 6)
+objectiveLayout.SortOrder = Enum.SortOrder.LayoutOrder
+objectiveLayout.Parent = objectiveList
 
 local notification = Instance.new("TextLabel")
 notification.Name = "Notification"
@@ -128,6 +207,7 @@ end
 makeVitalBar("Hunger", 38, Color3.fromRGB(222, 177, 75))
 makeVitalBar("Thirst", 62, Color3.fromRGB(76, 172, 222))
 makeVitalBar("Temperature", 86, Color3.fromRGB(226, 104, 72))
+makeVitalBar("Health", 110, Color3.fromRGB(207, 74, 91))
 
 local inventoryList = Instance.new("ScrollingFrame")
 inventoryList.Name = "InventoryList"
@@ -192,6 +272,15 @@ local function makeButton(text, width)
 
 	return button
 end
+
+local attackButton = makeButton("Attack", 110)
+attackButton.Name = "AttackButton"
+attackButton.AnchorPoint = Vector2.new(0.5, 1)
+attackButton.BackgroundColor3 = Color3.fromRGB(126, 64, 58)
+attackButton.Position = UDim2.new(0.5, 0, 1, -28)
+attackButton.Size = UDim2.fromOffset(110, 36)
+attackButton.TextSize = 14
+attackButton.Parent = root
 
 local function showNotification(message)
 	notification.Text = message
@@ -260,6 +349,13 @@ end
 
 local function requestBuild(itemId)
 	local ok, message = Remotes.get("BuildRequest"):InvokeServer(itemId)
+	if not ok and message then
+		showNotification(message)
+	end
+end
+
+local function requestAttack()
+	local ok, message = Remotes.get("AttackRequest"):InvokeServer()
 	if not ok and message then
 		showNotification(message)
 	end
@@ -374,8 +470,73 @@ local function renderCrafting()
 	end
 end
 
+local function renderWorldState()
+	local phase = worldState.IsNight and "Night" or "Daylight"
+	worldDetails.Text = string.format(
+		"Day %d   %s\n%s\n%s",
+		worldState.Day or 1,
+		worldState.Clock or "00:00",
+		worldState.Weather or "Clear",
+		phase
+	)
+end
+
+local function renderObjectives()
+	clearChildren(objectiveList)
+
+	for index, objective in ipairs(objectiveSnapshot.Objectives or {}) do
+		local row = Instance.new("Frame")
+		row.BackgroundColor3 = objective.Completed and Color3.fromRGB(44, 74, 56) or Color3.fromRGB(38, 43, 44)
+		row.BorderSizePixel = 0
+		row.LayoutOrder = index
+		row.Size = UDim2.new(1, -8, 0, 68)
+		row.Parent = objectiveList
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 6)
+		corner.Parent = row
+
+		local name = Instance.new("TextLabel")
+		name.BackgroundTransparency = 1
+		name.Font = Enum.Font.GothamBold
+		name.Text = objective.Completed and (objective.DisplayName .. "  DONE") or objective.DisplayName
+		name.TextColor3 = Color3.fromRGB(235, 238, 229)
+		name.TextSize = 12
+		name.TextXAlignment = Enum.TextXAlignment.Left
+		name.Position = UDim2.fromOffset(10, 5)
+		name.Size = UDim2.new(1, -20, 0, 18)
+		name.Parent = row
+
+		local description = Instance.new("TextLabel")
+		description.BackgroundTransparency = 1
+		description.Font = Enum.Font.Gotham
+		description.Text = objective.Description
+		description.TextColor3 = Color3.fromRGB(190, 196, 188)
+		description.TextSize = 11
+		description.TextWrapped = true
+		description.TextXAlignment = Enum.TextXAlignment.Left
+		description.TextYAlignment = Enum.TextYAlignment.Top
+		description.Position = UDim2.fromOffset(10, 25)
+		description.Size = UDim2.new(1, -20, 0, 26)
+		description.Parent = row
+
+		local progress = Instance.new("TextLabel")
+		progress.BackgroundTransparency = 1
+		progress.Font = Enum.Font.GothamMedium
+		progress.Text = objective.Progress
+		progress.TextColor3 = Color3.fromRGB(224, 207, 142)
+		progress.TextSize = 11
+		progress.TextXAlignment = Enum.TextXAlignment.Left
+		progress.Position = UDim2.fromOffset(10, 50)
+		progress.Size = UDim2.new(1, -20, 0, 15)
+		progress.Parent = row
+	end
+end
+
 local function renderAll()
 	updateVitals()
+	renderWorldState()
+	renderObjectives()
 	renderInventory()
 	renderCrafting()
 end
@@ -390,7 +551,29 @@ Remotes.get("InventoryUpdated").OnClientEvent:Connect(function(newInventory)
 	renderAll()
 end)
 
+Remotes.get("WorldStateUpdated").OnClientEvent:Connect(function(newWorldState)
+	worldState = newWorldState
+	renderWorldState()
+end)
+
+Remotes.get("ObjectiveUpdated").OnClientEvent:Connect(function(newObjectiveSnapshot)
+	objectiveSnapshot = newObjectiveSnapshot
+	renderObjectives()
+end)
+
 Remotes.get("Notification").OnClientEvent:Connect(showNotification)
+
+attackButton.Activated:Connect(requestAttack)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then
+		return
+	end
+
+	if input.KeyCode == Enum.KeyCode.F then
+		requestAttack()
+	end
+end)
 
 task.spawn(function()
 	local ok, result = pcall(function()

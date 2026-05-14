@@ -11,15 +11,21 @@ local context = {}
 context.WorldService = require(servicesFolder.WorldService)
 context.InventoryService = require(servicesFolder.InventoryService)
 context.VitalsService = require(servicesFolder.VitalsService)
+context.ObjectiveService = require(servicesFolder.ObjectiveService)
 context.ResourceService = require(servicesFolder.ResourceService)
 context.CraftingService = require(servicesFolder.CraftingService)
+context.EnemyService = require(servicesFolder.EnemyService)
+context.CombatService = require(servicesFolder.CombatService)
 
 local startupOrder = {
 	context.WorldService,
 	context.InventoryService,
 	context.VitalsService,
+	context.ObjectiveService,
 	context.ResourceService,
 	context.CraftingService,
+	context.EnemyService,
+	context.CombatService,
 }
 
 for _, service in ipairs(startupOrder) do
