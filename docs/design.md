@@ -54,6 +54,7 @@ The player wakes up in a small wilderness area and has to survive the first nigh
 - Region discovery grants XP and feeds an exploration objective.
 - Water springs and rain collectors make thirst management more active than eating berries.
 - Sprinting helps exploration and combat escapes, but stamina creates a short-term movement tradeoff.
+- Shelters now provide an active rest interaction that restores health and warmth, costs a little hunger and thirst, and has a cooldown.
 - Night stalkers create a reason to prepare before dark with weapons, armor, fire, and food.
 - Threat builds through dangerous nights and signal beacon upgrades, then turns into raids.
 - Defeated enemies drop raw meat and hide, feeding the cooking and armor loops.
@@ -65,6 +66,7 @@ The player wakes up in a small wilderness area and has to survive the first nigh
 - Spike traps give base placement a defensive purpose.
 - The signal beacon creates a longer rescue objective with staged costs and escalating danger.
 - Objectives teach the survival loop and reward useful items without requiring a separate tutorial screen.
+- The HUD keeps vitals, world state, objectives, combat, sprint, and quick consumables visible while moving backpack and crafting actions into a focused inventory menu.
 
 ## Next Production Steps
 

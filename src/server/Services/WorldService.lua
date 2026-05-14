@@ -172,9 +172,14 @@ local function createRegionLandmark(region, parent)
 	base.CanQuery = false
 
 	if region.Id == "PineRidge" then
-		local trunk = createPart("OldPine", Vector3.new(6, 32, 6), CFrame.new(center.X, 16, center.Z), Color3.fromRGB(72, 48, 31), model)
+		local trunk = createPart(
+			"OldPine",
+			Vector3.new(32, 6, 6),
+			CFrame.new(center.X, 16, center.Z) * CFrame.Angles(0, 0, math.rad(90)),
+			Color3.fromRGB(72, 48, 31),
+			model
+		)
 		trunk.Shape = Enum.PartType.Cylinder
-		trunk.CFrame *= CFrame.Angles(0, 0, math.rad(90))
 		trunk.Material = Enum.Material.Wood
 
 		local crown = createPart("RidgeCrown", Vector3.new(24, 24, 24), CFrame.new(center.X, 34, center.Z), Color3.fromRGB(28, 97, 50), model)

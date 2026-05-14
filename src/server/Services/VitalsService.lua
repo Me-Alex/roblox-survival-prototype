@@ -96,6 +96,10 @@ function VitalsService.applyConsumable(player, consumable)
 		vitals.Thirst = clampVital(vitals.Thirst + consumable.Thirst)
 	end
 
+	if consumable.Temperature then
+		vitals.Temperature = math.clamp(vitals.Temperature + consumable.Temperature, 0, 120)
+	end
+
 	if consumable.Health then
 		local humanoid = getHumanoid(player)
 		if humanoid then

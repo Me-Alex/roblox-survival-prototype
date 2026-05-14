@@ -7,6 +7,7 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local CraftingService = {}
 
 local context
+local lastRestByPlayer = {}
 
 local function notify(player, message)
 	Remotes.get("Notification"):FireClient(player, message)
@@ -90,6 +91,19 @@ local function createShelter(cframe)
 			post.Parent = model
 		end
 	end
+
+	local restPrompt = Instance.new("ProximityPrompt")
+	restPrompt.Name = "RestPrompt"
+	restPrompt.ActionText = "Rest"
+	restPrompt.ObjectText = "Shelter"
+	restPrompt.HoldDuration = 0.8
+	restPrompt.MaxActivationDistance = 10
+	restPrompt.RequiresLineOfSight = false
+	restPrompt.Parent = floor
+
+	restPrompt.Triggered:Connect(function(player)
+		CraftingService.restAtShelter(player)
+	end)
 
 	model.PrimaryPart = floor
 	return model
@@ -391,6 +405,40 @@ function CraftingService.upgradeBeacon(player, model)
 	return true, message
 end
 
+function CraftingService.restAtShelter(player)
+	local restConfig = Config.CampComfort.ShelterRest
+	local now = os.clock()
+	local lastRest = lastRestByPlayer[player] or 0
+	local remaining = restConfig.CooldownSeconds - (now - lastRest)
+
+	if remaining > 0 then
+		notify(player, string.format("Rest again in %ds.", math.ceil(remaining)))
+		return false, "Rest is cooling down."
+	end
+
+	lastRestByPlayer[player] = now
+
+	if context.VitalsService then
+		context.VitalsService.applyConsumable(player, {
+			Health = restConfig.Health,
+			Hunger = restConfig.Hunger,
+			Thirst = restConfig.Thirst,
+			Temperature = restConfig.Temperature,
+		})
+	end
+
+	if context.ObjectiveService then
+		context.ObjectiveService.recordShelterRest(player)
+	end
+
+	if context.ProgressionService then
+		context.ProgressionService.addXP(player, Config.Progression.XP.ShelterRest, "shelter rest")
+	end
+
+	notify(player, "You rested at the shelter.")
+	return true, "Rested."
+end
+
 function CraftingService.craft(player, recipeId)
 	local recipe = Config.Crafting[recipeId]
 	if not recipe then
@@ -505,6 +553,10 @@ function CraftingService.init(newContext)
 	Remotes.get("BuildRequest").OnServerInvoke = function(player, itemId)
 		return CraftingService.build(player, itemId)
 	end
+end
+
+function CraftingService.playerRemoving(player)
+	lastRestByPlayer[player] = nil
 end
 
 return CraftingService

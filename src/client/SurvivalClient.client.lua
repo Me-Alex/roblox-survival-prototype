@@ -38,10 +38,14 @@ local objectiveSnapshot = {
 	Objectives = {},
 	Counters = {},
 }
+local menuOpen = false
+local activeMenuTab = "Inventory"
+local quickSlotItems = { "Berries", "CookedBerries", "CookedMeat", "Bandage", "SurvivalTonic" }
 
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "SurvivalHud"
 screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = playerGui
 
 local root = Instance.new("Frame")
@@ -66,17 +70,24 @@ vitalsCorner.Parent = vitalsPanel
 
 local inventoryPanel = Instance.new("Frame")
 inventoryPanel.Name = "Inventory"
-inventoryPanel.AnchorPoint = Vector2.new(1, 1)
+inventoryPanel.AnchorPoint = Vector2.new(0.5, 0.5)
 inventoryPanel.BackgroundColor3 = Color3.fromRGB(24, 28, 30)
-inventoryPanel.BackgroundTransparency = 0.12
+inventoryPanel.BackgroundTransparency = 0.05
 inventoryPanel.BorderSizePixel = 0
-inventoryPanel.Position = UDim2.new(1, -18, 1, -18)
-inventoryPanel.Size = UDim2.fromOffset(390, 360)
+inventoryPanel.Position = UDim2.fromScale(0.5, 0.5)
+inventoryPanel.Size = UDim2.fromScale(0.86, 0.76)
+inventoryPanel.Visible = false
+inventoryPanel.ZIndex = 4
 inventoryPanel.Parent = root
 
 local inventoryCorner = Instance.new("UICorner")
 inventoryCorner.CornerRadius = UDim.new(0, 8)
 inventoryCorner.Parent = inventoryPanel
+
+local inventorySizeConstraint = Instance.new("UISizeConstraint")
+inventorySizeConstraint.MaxSize = Vector2.new(620, 440)
+inventorySizeConstraint.MinSize = Vector2.new(340, 300)
+inventorySizeConstraint.Parent = inventoryPanel
 
 local title = Instance.new("TextLabel")
 title.Name = "Title"
@@ -92,8 +103,22 @@ title.Parent = vitalsPanel
 
 local inventoryTitle = title:Clone()
 inventoryTitle.Name = "InventoryTitle"
-inventoryTitle.Text = "GEAR"
+inventoryTitle.Text = "INVENTORY"
+inventoryTitle.ZIndex = 5
 inventoryTitle.Parent = inventoryPanel
+
+local equipmentSummary = Instance.new("TextLabel")
+equipmentSummary.Name = "EquipmentSummary"
+equipmentSummary.BackgroundTransparency = 1
+equipmentSummary.Font = Enum.Font.GothamMedium
+equipmentSummary.Text = ""
+equipmentSummary.TextColor3 = Color3.fromRGB(191, 201, 190)
+equipmentSummary.TextSize = 12
+equipmentSummary.TextXAlignment = Enum.TextXAlignment.Left
+equipmentSummary.Position = UDim2.fromOffset(14, 35)
+equipmentSummary.Size = UDim2.new(1, -28, 0, 18)
+equipmentSummary.ZIndex = 5
+equipmentSummary.Parent = inventoryPanel
 
 local worldPanel = Instance.new("Frame")
 worldPanel.Name = "World"
@@ -239,11 +264,12 @@ inventoryList.Name = "InventoryList"
 inventoryList.Active = true
 inventoryList.BackgroundTransparency = 1
 inventoryList.BorderSizePixel = 0
-inventoryList.Position = UDim2.fromOffset(12, 36)
+inventoryList.Position = UDim2.fromOffset(14, 92)
 inventoryList.ScrollBarThickness = 6
-inventoryList.Size = UDim2.new(1, -24, 0, 144)
+inventoryList.Size = UDim2.new(1, -28, 1, -108)
 inventoryList.CanvasSize = UDim2.fromOffset(0, 0)
 inventoryList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+inventoryList.ZIndex = 5
 inventoryList.Parent = inventoryPanel
 
 local inventoryLayout = Instance.new("UIListLayout")
@@ -259,8 +285,10 @@ craftTitle.Text = "CRAFT"
 craftTitle.TextColor3 = Color3.fromRGB(235, 238, 229)
 craftTitle.TextSize = 14
 craftTitle.TextXAlignment = Enum.TextXAlignment.Left
-craftTitle.Position = UDim2.fromOffset(14, 188)
+craftTitle.Position = UDim2.fromOffset(14, 68)
 craftTitle.Size = UDim2.new(1, -28, 0, 20)
+craftTitle.Visible = false
+craftTitle.ZIndex = 5
 craftTitle.Parent = inventoryPanel
 
 local craftList = Instance.new("ScrollingFrame")
@@ -268,11 +296,13 @@ craftList.Name = "CraftList"
 craftList.Active = true
 craftList.BackgroundTransparency = 1
 craftList.BorderSizePixel = 0
-craftList.Position = UDim2.fromOffset(12, 214)
+craftList.Position = UDim2.fromOffset(14, 92)
 craftList.ScrollBarThickness = 6
-craftList.Size = UDim2.new(1, -24, 1, -226)
+craftList.Size = UDim2.new(1, -28, 1, -108)
 craftList.CanvasSize = UDim2.fromOffset(0, 0)
 craftList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+craftList.Visible = false
+craftList.ZIndex = 5
 craftList.Parent = inventoryPanel
 
 local craftLayout = Instance.new("UIListLayout")
@@ -315,6 +345,68 @@ sprintButton.Position = UDim2.new(0.5, -124, 1, -28)
 sprintButton.Size = UDim2.fromOffset(110, 36)
 sprintButton.TextSize = 14
 sprintButton.Parent = root
+
+local inventoryToggleButton = makeButton("Inventory", 118)
+inventoryToggleButton.Name = "InventoryToggleButton"
+inventoryToggleButton.AnchorPoint = Vector2.new(0.5, 1)
+inventoryToggleButton.BackgroundColor3 = Color3.fromRGB(68, 82, 96)
+inventoryToggleButton.Position = UDim2.new(0.5, 124, 1, -28)
+inventoryToggleButton.Size = UDim2.fromOffset(118, 36)
+inventoryToggleButton.TextSize = 14
+inventoryToggleButton.Parent = root
+
+local quickBar = Instance.new("Frame")
+quickBar.Name = "QuickBar"
+quickBar.AnchorPoint = Vector2.new(0.5, 1)
+quickBar.BackgroundColor3 = Color3.fromRGB(24, 28, 30)
+quickBar.BackgroundTransparency = 0.16
+quickBar.BorderSizePixel = 0
+quickBar.Position = UDim2.new(0.5, 0, 1, -78)
+quickBar.Size = UDim2.fromOffset(408, 46)
+quickBar.Parent = root
+
+local quickBarCorner = Instance.new("UICorner")
+quickBarCorner.CornerRadius = UDim.new(0, 8)
+quickBarCorner.Parent = quickBar
+
+local quickBarLayout = Instance.new("UIListLayout")
+quickBarLayout.FillDirection = Enum.FillDirection.Horizontal
+quickBarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+quickBarLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+quickBarLayout.Padding = UDim.new(0, 6)
+quickBarLayout.SortOrder = Enum.SortOrder.LayoutOrder
+quickBarLayout.Parent = quickBar
+
+local menuTabBar = Instance.new("Frame")
+menuTabBar.Name = "TabBar"
+menuTabBar.BackgroundTransparency = 1
+menuTabBar.Position = UDim2.fromOffset(14, 58)
+menuTabBar.Size = UDim2.fromOffset(280, 28)
+menuTabBar.ZIndex = 5
+menuTabBar.Parent = inventoryPanel
+
+local menuTabLayout = Instance.new("UIListLayout")
+menuTabLayout.FillDirection = Enum.FillDirection.Horizontal
+menuTabLayout.Padding = UDim.new(0, 8)
+menuTabLayout.SortOrder = Enum.SortOrder.LayoutOrder
+menuTabLayout.Parent = menuTabBar
+
+local bagTabButton = makeButton("Bag", 86)
+bagTabButton.Name = "BagTab"
+bagTabButton.ZIndex = 6
+bagTabButton.Parent = menuTabBar
+
+local craftTabButton = makeButton("Craft", 86)
+craftTabButton.Name = "CraftTab"
+craftTabButton.ZIndex = 6
+craftTabButton.Parent = menuTabBar
+
+local closeMenuButton = makeButton("Close", 76)
+closeMenuButton.Name = "CloseMenu"
+closeMenuButton.AnchorPoint = Vector2.new(1, 0)
+closeMenuButton.Position = UDim2.new(1, -14, 0, 10)
+closeMenuButton.ZIndex = 6
+closeMenuButton.Parent = inventoryPanel
 
 local function showNotification(message)
 	notification.Text = message
@@ -446,8 +538,18 @@ local function applyInventorySnapshot(snapshot)
 	end
 end
 
+local function getItemDisplayName(itemId)
+	local itemConfig = itemId and Config.Items[itemId]
+	return itemConfig and itemConfig.DisplayName or "None"
+end
+
 local function renderInventory()
 	clearChildren(inventoryList)
+	equipmentSummary.Text = string.format(
+		"Weapon  %s    Armor  %s",
+		getItemDisplayName(equipment.Weapon),
+		getItemDisplayName(equipment.Armor)
+	)
 
 	local ordered = {}
 	for itemId in pairs(Config.Items) do
@@ -455,9 +557,12 @@ local function renderInventory()
 	end
 	table.sort(ordered)
 
+	local hasVisibleItems = false
+
 	for _, itemId in ipairs(ordered) do
 		local count = inventory[itemId] or 0
 		if count > 0 then
+			hasVisibleItems = true
 			local itemConfig = Config.Items[itemId]
 			local equipmentConfig = Config.Equipment[itemId]
 			local row = Instance.new("Frame")
@@ -515,6 +620,18 @@ local function renderInventory()
 			end
 		end
 	end
+
+	if not hasVisibleItems then
+		local empty = Instance.new("TextLabel")
+		empty.BackgroundTransparency = 1
+		empty.Font = Enum.Font.GothamMedium
+		empty.Text = "Backpack empty"
+		empty.TextColor3 = Color3.fromRGB(190, 196, 188)
+		empty.TextSize = 13
+		empty.TextXAlignment = Enum.TextXAlignment.Left
+		empty.Size = UDim2.new(1, -8, 0, 32)
+		empty.Parent = inventoryList
+	end
 end
 
 local function renderCrafting()
@@ -568,6 +685,53 @@ local function renderCrafting()
 		craftButton.Activated:Connect(function()
 			requestCraft(recipeId)
 		end)
+	end
+end
+
+local function renderQuickSlots()
+	clearChildren(quickBar)
+
+	for index, itemId in ipairs(quickSlotItems) do
+		local itemConfig = Config.Items[itemId]
+		local count = inventory[itemId] or 0
+		local displayName = itemConfig and itemConfig.DisplayName or itemId
+		local button = makeButton(string.format("%s\nx%d", displayName, count), 72)
+		button.LayoutOrder = index
+		button.Size = UDim2.fromOffset(72, 34)
+		button.TextSize = 10
+		button.TextWrapped = true
+		button.BackgroundColor3 = count > 0 and Color3.fromRGB(72, 96, 88) or Color3.fromRGB(55, 58, 58)
+		button.Parent = quickBar
+		button.Activated:Connect(function()
+			if (inventory[itemId] or 0) > 0 then
+				requestConsume(itemId)
+			else
+				showNotification(string.format("No %s.", displayName))
+			end
+		end)
+	end
+end
+
+local function setMenuTab(tabName)
+	activeMenuTab = tabName
+	local showingInventory = activeMenuTab == "Inventory"
+
+	inventoryTitle.Text = showingInventory and "INVENTORY" or "CRAFTING"
+	inventoryList.Visible = showingInventory
+	equipmentSummary.Visible = showingInventory
+	craftTitle.Visible = not showingInventory
+	craftList.Visible = not showingInventory
+	bagTabButton.BackgroundColor3 = showingInventory and Color3.fromRGB(92, 122, 82) or Color3.fromRGB(72, 96, 88)
+	craftTabButton.BackgroundColor3 = showingInventory and Color3.fromRGB(72, 96, 88) or Color3.fromRGB(92, 122, 82)
+end
+
+local function setMenuOpen(open)
+	menuOpen = open
+	inventoryPanel.Visible = menuOpen
+	inventoryToggleButton.BackgroundColor3 = menuOpen and Color3.fromRGB(92, 122, 82) or Color3.fromRGB(68, 82, 96)
+
+	if menuOpen then
+		setMenuTab(activeMenuTab)
 	end
 end
 
@@ -646,6 +810,8 @@ local function renderAll()
 	renderObjectives()
 	renderInventory()
 	renderCrafting()
+	renderQuickSlots()
+	setMenuTab(activeMenuTab)
 end
 
 local function setSprintRequested(requested)
@@ -713,14 +879,36 @@ end)
 Remotes.get("Notification").OnClientEvent:Connect(showNotification)
 
 attackButton.Activated:Connect(requestAttack)
+inventoryToggleButton.Activated:Connect(function()
+	setMenuOpen(not menuOpen)
+end)
+
+bagTabButton.Activated:Connect(function()
+	setMenuTab("Inventory")
+end)
+
+craftTabButton.Activated:Connect(function()
+	setMenuTab("Crafting")
+end)
+
+closeMenuButton.Activated:Connect(function()
+	setMenuOpen(false)
+end)
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if input.KeyCode == Enum.KeyCode.Escape and menuOpen then
+		setMenuOpen(false)
+		return
+	end
+
 	if gameProcessed then
 		return
 	end
 
 	if input.KeyCode == Enum.KeyCode.F then
 		requestAttack()
+	elseif input.KeyCode == Enum.KeyCode.I or input.KeyCode == Enum.KeyCode.M then
+		setMenuOpen(not menuOpen)
 	elseif input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
 		setSprintRequested(true)
 	end

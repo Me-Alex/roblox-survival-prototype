@@ -422,6 +422,16 @@ SurvivalConfig.Buildables = {
 	},
 }
 
+SurvivalConfig.CampComfort = {
+	ShelterRest = {
+		CooldownSeconds = 55,
+		Health = 24,
+		Hunger = -4,
+		Thirst = -3,
+		Temperature = 10,
+	},
+}
+
 SurvivalConfig.Equipment = {
 	StoneAxe = { Slot = "Weapon", MaxDurability = 45 },
 	Spear = { Slot = "Weapon", MaxDurability = 64 },
@@ -445,6 +455,7 @@ SurvivalConfig.Progression = {
 		TrapTriggered = 14,
 		BeaconUpgrade = 70,
 		RegionDiscovered = 20,
+		ShelterRest = 18,
 	},
 }
 
@@ -620,6 +631,14 @@ SurvivalConfig.Objectives = {
 		Kind = "Build",
 		Requirements = { SpikeTrap = 2 },
 		Reward = { IronOre = 3 },
+	},
+	RestAtShelter = {
+		DisplayName = "Recover At Shelter",
+		Description = "Rest at a placed shelter.",
+		Kind = "Counter",
+		Counter = "ShelterRests",
+		Required = 1,
+		Reward = { CookedBerries = 1, Bandage = 1 },
 	},
 	ForgeIron = {
 		DisplayName = "Iron Age",

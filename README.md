@@ -25,7 +25,8 @@ A Rojo-compatible Roblox survival game prototype with resource gathering, hunger
 - Expanded crafting for spear, hide armor, cooked meat, antidote, survival tonic, rain collectors, workbench, forge, spike traps, signal beacons, and iron-tier gear.
 - Iron deposits, smelting, and station-gated recipes.
 - Placeable campfires and shelters that affect night-time survival.
-- Client HUD for vitals, inventory, consumables, buildables, crafting, and notifications.
+- Client HUD for vitals, quick consumables, inventory menu, crafting, buildables, and notifications.
+- Shelter rest interaction that restores health and warmth with a short cooldown and survival tradeoff.
 - World HUD for day/time/region/weather/threat, objective tracker, and attack/sprint buttons.
 
 ## Project Layout
@@ -80,6 +81,7 @@ This repository is designed to live on GitHub as source code. Clone it on anothe
 - Cure bleeding or poison with `Bandage`, `Antidote`, or `Survival Tonic`.
 - Craft `Cooked Berries` near the campfire and use them from the HUD.
 - Build a shelter and verify cold exposure is less punishing nearby.
+- Rest at a shelter when hurt or cold, then watch the cooldown before using it again.
 - Place a `Rain Collector Kit` and use it as backup drinking water.
 - Search abandoned caches for rare supplies.
 - Visit Stonebreak Cliffs or Iron Highlands when you need more ore.

@@ -34,6 +34,7 @@ local function ensureProgress(player)
 				EnemiesDefeated = 0,
 				NightsSurvived = 0,
 				RegionsDiscovered = 0,
+				ShelterRests = 0,
 			},
 			Completed = {},
 		}
@@ -209,6 +210,12 @@ end
 function ObjectiveService.recordNightSurvived(player)
 	local progress = ensureProgress(player)
 	progress.Counters.NightsSurvived = (progress.Counters.NightsSurvived or 0) + 1
+	evaluate(player)
+end
+
+function ObjectiveService.recordShelterRest(player)
+	local progress = ensureProgress(player)
+	progress.Counters.ShelterRests = (progress.Counters.ShelterRests or 0) + 1
 	evaluate(player)
 end
 

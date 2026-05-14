@@ -130,13 +130,15 @@ end
 local function createTree(position)
 	local model = Instance.new("Model")
 	model.Name = "Tree"
+	local groundY = 0
 
 	local trunk = Instance.new("Part")
 	trunk.Name = "Trunk"
 	trunk.Anchored = true
 	trunk.Shape = Enum.PartType.Cylinder
-	trunk.Size = Vector3.new(3, 12, 3)
-	trunk.CFrame = CFrame.new(position + Vector3.new(0, 5.2, 0)) * CFrame.Angles(0, 0, math.rad(90))
+	trunk.Size = Vector3.new(12, 3, 3)
+	trunk.CFrame = CFrame.new(position.X, groundY + trunk.Size.X * 0.5, position.Z)
+		* CFrame.Angles(0, 0, math.rad(90))
 	trunk.Color = RESOURCE_COLORS.Tree
 	trunk.Material = Enum.Material.Wood
 	trunk.Parent = model
@@ -146,10 +148,23 @@ local function createTree(position)
 	leaves.Anchored = true
 	leaves.Shape = Enum.PartType.Ball
 	leaves.Size = Vector3.new(11, 11, 11)
-	leaves.CFrame = CFrame.new(position + Vector3.new(0, 12, 0))
+	leaves.CFrame = CFrame.new(position.X, groundY + 12.5, position.Z)
 	leaves.Color = Color3.fromRGB(40, 112, 53)
 	leaves.Material = Enum.Material.Grass
 	leaves.Parent = model
+
+	for offset = -1, 1, 2 do
+		local root = Instance.new("Part")
+		root.Name = "RootFlare"
+		root.Anchored = true
+		root.CanCollide = false
+		root.Size = Vector3.new(3.5, 0.6, 1.2)
+		root.CFrame = CFrame.new(position.X + offset * 1.2, groundY + 0.25, position.Z)
+			* CFrame.Angles(0, offset * math.rad(22), 0)
+		root.Color = RESOURCE_COLORS.Tree
+		root.Material = Enum.Material.Wood
+		root.Parent = model
+	end
 
 	model.PrimaryPart = trunk
 	createPrompt(trunk, "Tree", Config.Resources.Tree)
