@@ -9,6 +9,7 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes)
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
+local ITEM_ID_ATTRIBUTE = "SurvivalItemId"
 
 local inventory = {}
 local equipment = {}
@@ -40,7 +41,31 @@ local objectiveSnapshot = {
 }
 local menuOpen = false
 local activeMenuTab = "Inventory"
-local quickSlotItems = { "Berries", "CookedBerries", "CookedMeat", "Bandage", "SurvivalTonic" }
+local localAttackAnimating = false
+
+local DEFAULT_ATTACK_GRIPS = {
+	StoneAxe = CFrame.new(0, -0.15, -0.35) * CFrame.Angles(0, math.rad(90), math.rad(82)),
+	Spear = CFrame.new(0, -0.1, -0.55) * CFrame.Angles(0, math.rad(90), math.rad(86)),
+	IronSpear = CFrame.new(0, -0.1, -0.55) * CFrame.Angles(0, math.rad(90), math.rad(86)),
+}
+
+local ATTACK_GRIPS = {
+	StoneAxe = {
+		CFrame.new(0.1, -0.1, -0.2) * CFrame.Angles(math.rad(-38), math.rad(104), math.rad(122)),
+		CFrame.new(0, -0.22, -0.6) * CFrame.Angles(math.rad(44), math.rad(72), math.rad(54)),
+		CFrame.new(0, -0.15, -0.35) * CFrame.Angles(0, math.rad(90), math.rad(82)),
+	},
+	Spear = {
+		CFrame.new(0, -0.08, -0.28) * CFrame.Angles(math.rad(-8), math.rad(92), math.rad(92)),
+		CFrame.new(0, -0.08, -1.1) * CFrame.Angles(math.rad(4), math.rad(88), math.rad(88)),
+		CFrame.new(0, -0.1, -0.55) * CFrame.Angles(0, math.rad(90), math.rad(86)),
+	},
+	IronSpear = {
+		CFrame.new(0, -0.08, -0.28) * CFrame.Angles(math.rad(-8), math.rad(92), math.rad(92)),
+		CFrame.new(0, -0.08, -1.15) * CFrame.Angles(math.rad(4), math.rad(88), math.rad(88)),
+		CFrame.new(0, -0.1, -0.55) * CFrame.Angles(0, math.rad(90), math.rad(86)),
+	},
+}
 
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "SurvivalHud"
@@ -60,8 +85,8 @@ vitalsPanel.AnchorPoint = Vector2.new(0, 0)
 vitalsPanel.BackgroundColor3 = Color3.fromRGB(24, 28, 30)
 vitalsPanel.BackgroundTransparency = 0.12
 vitalsPanel.BorderSizePixel = 0
-vitalsPanel.Position = UDim2.fromOffset(18, 18)
-vitalsPanel.Size = UDim2.fromOffset(270, 186)
+vitalsPanel.Position = UDim2.fromOffset(18, 76)
+vitalsPanel.Size = UDim2.fromOffset(560, 42)
 vitalsPanel.Parent = root
 
 local vitalsCorner = Instance.new("UICorner")
@@ -86,7 +111,7 @@ inventoryCorner.Parent = inventoryPanel
 
 local inventorySizeConstraint = Instance.new("UISizeConstraint")
 inventorySizeConstraint.MaxSize = Vector2.new(620, 440)
-inventorySizeConstraint.MinSize = Vector2.new(340, 300)
+inventorySizeConstraint.MinSize = Vector2.new(430, 300)
 inventorySizeConstraint.Parent = inventoryPanel
 
 local title = Instance.new("TextLabel")
@@ -99,6 +124,7 @@ title.TextSize = 16
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Position = UDim2.fromOffset(14, 9)
 title.Size = UDim2.new(1, -28, 0, 22)
+title.Visible = false
 title.Parent = vitalsPanel
 
 local inventoryTitle = title:Clone()
@@ -122,13 +148,15 @@ equipmentSummary.Parent = inventoryPanel
 
 local worldPanel = Instance.new("Frame")
 worldPanel.Name = "World"
-worldPanel.AnchorPoint = Vector2.new(1, 0)
+worldPanel.AnchorPoint = Vector2.new(0, 0)
 worldPanel.BackgroundColor3 = Color3.fromRGB(24, 28, 30)
-worldPanel.BackgroundTransparency = 0.12
+worldPanel.BackgroundTransparency = 1
 worldPanel.BorderSizePixel = 0
-worldPanel.Position = UDim2.new(1, -18, 0, 18)
-worldPanel.Size = UDim2.fromOffset(250, 154)
-worldPanel.Parent = root
+worldPanel.Position = UDim2.fromOffset(14, 92)
+worldPanel.Size = UDim2.new(1, -28, 1, -108)
+worldPanel.Visible = false
+worldPanel.ZIndex = 5
+worldPanel.Parent = inventoryPanel
 
 local worldCorner = Instance.new("UICorner")
 worldCorner.CornerRadius = UDim.new(0, 8)
@@ -137,6 +165,7 @@ worldCorner.Parent = worldPanel
 local worldTitle = title:Clone()
 worldTitle.Name = "WorldTitle"
 worldTitle.Text = "WORLD"
+worldTitle.Visible = false
 worldTitle.Parent = worldPanel
 
 local worldDetails = Instance.new("TextLabel")
@@ -148,18 +177,21 @@ worldDetails.TextSize = 13
 worldDetails.TextWrapped = true
 worldDetails.TextXAlignment = Enum.TextXAlignment.Left
 worldDetails.TextYAlignment = Enum.TextYAlignment.Top
-worldDetails.Position = UDim2.fromOffset(14, 36)
-worldDetails.Size = UDim2.new(1, -28, 1, -46)
+worldDetails.Position = UDim2.fromOffset(0, 0)
+worldDetails.Size = UDim2.new(1, 0, 1, 0)
+worldDetails.ZIndex = 5
 worldDetails.Parent = worldPanel
 
 local objectivePanel = Instance.new("Frame")
 objectivePanel.Name = "Objectives"
 objectivePanel.BackgroundColor3 = Color3.fromRGB(24, 28, 30)
-objectivePanel.BackgroundTransparency = 0.12
+objectivePanel.BackgroundTransparency = 1
 objectivePanel.BorderSizePixel = 0
-objectivePanel.Position = UDim2.fromOffset(18, 218)
-objectivePanel.Size = UDim2.fromOffset(330, 230)
-objectivePanel.Parent = root
+objectivePanel.Position = UDim2.fromOffset(14, 92)
+objectivePanel.Size = UDim2.new(1, -28, 1, -108)
+objectivePanel.Visible = false
+objectivePanel.ZIndex = 5
+objectivePanel.Parent = inventoryPanel
 
 local objectiveCorner = Instance.new("UICorner")
 objectiveCorner.CornerRadius = UDim.new(0, 8)
@@ -168,6 +200,7 @@ objectiveCorner.Parent = objectivePanel
 local objectiveTitle = title:Clone()
 objectiveTitle.Name = "ObjectiveTitle"
 objectiveTitle.Text = "OBJECTIVES"
+objectiveTitle.Visible = false
 objectiveTitle.Parent = objectivePanel
 
 local objectiveList = Instance.new("ScrollingFrame")
@@ -175,11 +208,12 @@ objectiveList.Name = "ObjectiveList"
 objectiveList.Active = true
 objectiveList.BackgroundTransparency = 1
 objectiveList.BorderSizePixel = 0
-objectiveList.Position = UDim2.fromOffset(12, 38)
+objectiveList.Position = UDim2.fromOffset(0, 0)
 objectiveList.ScrollBarThickness = 6
-objectiveList.Size = UDim2.new(1, -24, 1, -50)
+objectiveList.Size = UDim2.new(1, 0, 1, 0)
 objectiveList.CanvasSize = UDim2.fromOffset(0, 0)
 objectiveList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+objectiveList.ZIndex = 5
 objectiveList.Parent = objectivePanel
 
 local objectiveLayout = Instance.new("UIListLayout")
@@ -218,6 +252,7 @@ local function makeVitalBar(name, y, color)
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.Position = UDim2.fromOffset(14, y)
 	label.Size = UDim2.fromOffset(106, 18)
+	label.Visible = false
 	label.Parent = vitalsPanel
 
 	local track = Instance.new("Frame")
@@ -226,6 +261,7 @@ local function makeVitalBar(name, y, color)
 	track.BorderSizePixel = 0
 	track.Position = UDim2.fromOffset(124, y + 3)
 	track.Size = UDim2.fromOffset(128, 12)
+	track.Visible = false
 	track.Parent = vitalsPanel
 
 	local fill = Instance.new("Frame")
@@ -257,7 +293,32 @@ statusText.TextSize = 12
 statusText.TextXAlignment = Enum.TextXAlignment.Left
 statusText.Position = UDim2.fromOffset(14, 158)
 statusText.Size = UDim2.new(1, -28, 0, 18)
+statusText.Visible = false
 statusText.Parent = vitalsPanel
+
+local compactStatusText = Instance.new("TextLabel")
+compactStatusText.Name = "CompactStatus"
+compactStatusText.BackgroundTransparency = 1
+compactStatusText.Font = Enum.Font.GothamBold
+compactStatusText.Text = "HP 100  H 100  W 100  Temp 72  Sta 100"
+compactStatusText.TextColor3 = Color3.fromRGB(235, 238, 229)
+compactStatusText.TextSize = 12
+compactStatusText.TextXAlignment = Enum.TextXAlignment.Left
+compactStatusText.Position = UDim2.fromOffset(12, 4)
+compactStatusText.Size = UDim2.new(1, -24, 0, 17)
+compactStatusText.Parent = vitalsPanel
+
+local compactWorldText = Instance.new("TextLabel")
+compactWorldText.Name = "CompactWorld"
+compactWorldText.BackgroundTransparency = 1
+compactWorldText.Font = Enum.Font.GothamMedium
+compactWorldText.Text = "Day 1  09:00  Base Meadow"
+compactWorldText.TextColor3 = Color3.fromRGB(190, 201, 192)
+compactWorldText.TextSize = 11
+compactWorldText.TextXAlignment = Enum.TextXAlignment.Left
+compactWorldText.Position = UDim2.fromOffset(12, 21)
+compactWorldText.Size = UDim2.new(1, -24, 0, 16)
+compactWorldText.Parent = vitalsPanel
 
 local inventoryList = Instance.new("ScrollingFrame")
 inventoryList.Name = "InventoryList"
@@ -330,28 +391,28 @@ end
 
 local attackButton = makeButton("Attack", 110)
 attackButton.Name = "AttackButton"
-attackButton.AnchorPoint = Vector2.new(0.5, 1)
+attackButton.AnchorPoint = Vector2.new(1, 1)
 attackButton.BackgroundColor3 = Color3.fromRGB(126, 64, 58)
-attackButton.Position = UDim2.new(0.5, 0, 1, -28)
-attackButton.Size = UDim2.fromOffset(110, 36)
+attackButton.Position = UDim2.new(1, -20, 1, -140)
+attackButton.Size = UDim2.fromOffset(98, 36)
 attackButton.TextSize = 14
 attackButton.Parent = root
 
 local sprintButton = makeButton("Sprint", 110)
 sprintButton.Name = "SprintButton"
-sprintButton.AnchorPoint = Vector2.new(0.5, 1)
+sprintButton.AnchorPoint = Vector2.new(1, 1)
 sprintButton.BackgroundColor3 = Color3.fromRGB(70, 92, 72)
-sprintButton.Position = UDim2.new(0.5, -124, 1, -28)
-sprintButton.Size = UDim2.fromOffset(110, 36)
+sprintButton.Position = UDim2.new(1, -20, 1, -184)
+sprintButton.Size = UDim2.fromOffset(98, 36)
 sprintButton.TextSize = 14
 sprintButton.Parent = root
 
-local inventoryToggleButton = makeButton("Inventory", 118)
+local inventoryToggleButton = makeButton("Menu", 98)
 inventoryToggleButton.Name = "InventoryToggleButton"
-inventoryToggleButton.AnchorPoint = Vector2.new(0.5, 1)
+inventoryToggleButton.AnchorPoint = Vector2.new(1, 1)
 inventoryToggleButton.BackgroundColor3 = Color3.fromRGB(68, 82, 96)
-inventoryToggleButton.Position = UDim2.new(0.5, 124, 1, -28)
-inventoryToggleButton.Size = UDim2.fromOffset(118, 36)
+inventoryToggleButton.Position = UDim2.new(1, -20, 1, -228)
+inventoryToggleButton.Size = UDim2.fromOffset(98, 36)
 inventoryToggleButton.TextSize = 14
 inventoryToggleButton.Parent = root
 
@@ -363,6 +424,7 @@ quickBar.BackgroundTransparency = 0.16
 quickBar.BorderSizePixel = 0
 quickBar.Position = UDim2.new(0.5, 0, 1, -78)
 quickBar.Size = UDim2.fromOffset(408, 46)
+quickBar.Visible = false
 quickBar.Parent = root
 
 local quickBarCorner = Instance.new("UICorner")
@@ -381,7 +443,7 @@ local menuTabBar = Instance.new("Frame")
 menuTabBar.Name = "TabBar"
 menuTabBar.BackgroundTransparency = 1
 menuTabBar.Position = UDim2.fromOffset(14, 58)
-menuTabBar.Size = UDim2.fromOffset(280, 28)
+menuTabBar.Size = UDim2.new(1, -104, 0, 28)
 menuTabBar.ZIndex = 5
 menuTabBar.Parent = inventoryPanel
 
@@ -391,15 +453,25 @@ menuTabLayout.Padding = UDim.new(0, 8)
 menuTabLayout.SortOrder = Enum.SortOrder.LayoutOrder
 menuTabLayout.Parent = menuTabBar
 
-local bagTabButton = makeButton("Bag", 86)
+local bagTabButton = makeButton("Bag", 68)
 bagTabButton.Name = "BagTab"
 bagTabButton.ZIndex = 6
 bagTabButton.Parent = menuTabBar
 
-local craftTabButton = makeButton("Craft", 86)
+local craftTabButton = makeButton("Craft", 68)
 craftTabButton.Name = "CraftTab"
 craftTabButton.ZIndex = 6
 craftTabButton.Parent = menuTabBar
+
+local worldTabButton = makeButton("World", 68)
+worldTabButton.Name = "WorldTab"
+worldTabButton.ZIndex = 6
+worldTabButton.Parent = menuTabBar
+
+local objectivesTabButton = makeButton("Goals", 68)
+objectivesTabButton.Name = "ObjectivesTab"
+objectivesTabButton.ZIndex = 6
+objectivesTabButton.Parent = menuTabBar
 
 local closeMenuButton = makeButton("Close", 76)
 closeMenuButton.Name = "CloseMenu"
@@ -443,6 +515,15 @@ local function updateVitals()
 	table.sort(statuses)
 
 	statusText.Text = #statuses > 0 and ("Status  " .. table.concat(statuses, ", ")) or "Status  Stable"
+	compactStatusText.Text = string.format(
+		"HP %d   H %d   W %d   Temp %d   Sta %d   %s",
+		math.floor((vitals.Health or 0) + 0.5),
+		math.floor((vitals.Hunger or 0) + 0.5),
+		math.floor((vitals.Thirst or 0) + 0.5),
+		math.floor((vitals.Temperature or 0) + 0.5),
+		math.floor(stamina + 0.5),
+		#statuses > 0 and table.concat(statuses, ", ") or "Stable"
+	)
 end
 
 local function clearChildren(frame)
@@ -519,7 +600,57 @@ local function requestEquip(itemId)
 	end
 end
 
+local function getHeldWeaponTool()
+	local character = player.Character
+	if not character then
+		return nil
+	end
+
+	for _, child in ipairs(character:GetChildren()) do
+		if child:IsA("Tool") then
+			local itemId = child:GetAttribute(ITEM_ID_ATTRIBUTE)
+			if itemId and Config.Combat.Weapons[itemId] then
+				return child, itemId
+			end
+		end
+	end
+
+	return nil
+end
+
+local function playLocalAttackAnimation()
+	if localAttackAnimating then
+		return
+	end
+
+	local tool, itemId = getHeldWeaponTool()
+	local sequence = itemId and ATTACK_GRIPS[itemId] or nil
+	if not tool or not sequence then
+		return
+	end
+
+	localAttackAnimating = true
+
+	task.spawn(function()
+		for _, grip in ipairs(sequence) do
+			if not tool.Parent then
+				break
+			end
+
+			tool.Grip = grip
+			task.wait(0.08)
+		end
+
+		if tool.Parent then
+			tool.Grip = DEFAULT_ATTACK_GRIPS[itemId] or CFrame.new()
+		end
+
+		localAttackAnimating = false
+	end)
+end
+
 local function requestAttack()
+	playLocalAttackAnimation()
 	local ok, message = Remotes.get("AttackRequest"):InvokeServer()
 	if not ok and message then
 		showNotification(message)
@@ -690,39 +821,35 @@ end
 
 local function renderQuickSlots()
 	clearChildren(quickBar)
-
-	for index, itemId in ipairs(quickSlotItems) do
-		local itemConfig = Config.Items[itemId]
-		local count = inventory[itemId] or 0
-		local displayName = itemConfig and itemConfig.DisplayName or itemId
-		local button = makeButton(string.format("%s\nx%d", displayName, count), 72)
-		button.LayoutOrder = index
-		button.Size = UDim2.fromOffset(72, 34)
-		button.TextSize = 10
-		button.TextWrapped = true
-		button.BackgroundColor3 = count > 0 and Color3.fromRGB(72, 96, 88) or Color3.fromRGB(55, 58, 58)
-		button.Parent = quickBar
-		button.Activated:Connect(function()
-			if (inventory[itemId] or 0) > 0 then
-				requestConsume(itemId)
-			else
-				showNotification(string.format("No %s.", displayName))
-			end
-		end)
-	end
 end
 
 local function setMenuTab(tabName)
 	activeMenuTab = tabName
 	local showingInventory = activeMenuTab == "Inventory"
+	local showingCrafting = activeMenuTab == "Crafting"
+	local showingWorld = activeMenuTab == "World"
+	local showingObjectives = activeMenuTab == "Objectives"
 
-	inventoryTitle.Text = showingInventory and "INVENTORY" or "CRAFTING"
+	if showingInventory then
+		inventoryTitle.Text = "INVENTORY"
+	elseif showingCrafting then
+		inventoryTitle.Text = "CRAFTING"
+	elseif showingWorld then
+		inventoryTitle.Text = "WORLD"
+	else
+		inventoryTitle.Text = "OBJECTIVES"
+	end
+
 	inventoryList.Visible = showingInventory
 	equipmentSummary.Visible = showingInventory
-	craftTitle.Visible = not showingInventory
-	craftList.Visible = not showingInventory
+	craftTitle.Visible = showingCrafting
+	craftList.Visible = showingCrafting
+	worldPanel.Visible = showingWorld
+	objectivePanel.Visible = showingObjectives
 	bagTabButton.BackgroundColor3 = showingInventory and Color3.fromRGB(92, 122, 82) or Color3.fromRGB(72, 96, 88)
-	craftTabButton.BackgroundColor3 = showingInventory and Color3.fromRGB(72, 96, 88) or Color3.fromRGB(92, 122, 82)
+	craftTabButton.BackgroundColor3 = showingCrafting and Color3.fromRGB(92, 122, 82) or Color3.fromRGB(72, 96, 88)
+	worldTabButton.BackgroundColor3 = showingWorld and Color3.fromRGB(92, 122, 82) or Color3.fromRGB(72, 96, 88)
+	objectivesTabButton.BackgroundColor3 = showingObjectives and Color3.fromRGB(92, 122, 82) or Color3.fromRGB(72, 96, 88)
 end
 
 local function setMenuOpen(open)
@@ -738,6 +865,16 @@ end
 local function renderWorldState()
 	local phase = worldState.IsNight and "Night" or "Daylight"
 	local threatLine = worldState.Threat and string.format("\nThreat %d/100", worldState.Threat) or ""
+	compactWorldText.Text = string.format(
+		"Day %d  %s   %s   %s   Lv %d %d/%s",
+		worldState.Day or 1,
+		worldState.Clock or "00:00",
+		worldState.Region or "Wilderness",
+		worldState.Weather or "Clear",
+		progression.Level or 1,
+		progression.XP or 0,
+		progression.NextLevelXP and tostring(progression.NextLevelXP) or "max"
+	)
 	worldDetails.Text = string.format(
 		"Day %d   %s\n%s\n%s\n%s\nLevel %d  XP %d/%s%s",
 		worldState.Day or 1,
@@ -849,6 +986,7 @@ local function updateSprint(deltaTime)
 	end
 
 	updateVitalBar("Stamina", math.floor(stamina + 0.5))
+	updateVitals()
 end
 
 Remotes.get("VitalsUpdated").OnClientEvent:Connect(function(newVitals)
@@ -889,6 +1027,14 @@ end)
 
 craftTabButton.Activated:Connect(function()
 	setMenuTab("Crafting")
+end)
+
+worldTabButton.Activated:Connect(function()
+	setMenuTab("World")
+end)
+
+objectivesTabButton.Activated:Connect(function()
+	setMenuTab("Objectives")
 end)
 
 closeMenuButton.Activated:Connect(function()

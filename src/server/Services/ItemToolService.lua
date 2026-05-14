@@ -12,6 +12,7 @@ local ACTION_COOLDOWN_SECONDS = 0.35
 
 local context
 local lastActionByPlayer = {}
+local activeAnimations = {}
 
 local ITEM_VISUALS = {
 	Wood = { Shape = "Cylinder", Size = Vector3.new(3.2, 0.65, 0.65), Color = Color3.fromRGB(101, 67, 42), Material = Enum.Material.Wood },
@@ -43,6 +44,30 @@ local ITEM_VISUALS = {
 	SignalBeaconKit = { Shape = "Block", Size = Vector3.new(1.7, 0.8, 1.7), Color = Color3.fromRGB(103, 116, 119), Material = Enum.Material.Metal, Kind = "BeaconKit" },
 }
 
+local DEFAULT_GRIPS = {
+	StoneAxe = CFrame.new(0, -0.15, -0.35) * CFrame.Angles(0, math.rad(90), math.rad(82)),
+	Spear = CFrame.new(0, -0.1, -0.55) * CFrame.Angles(0, math.rad(90), math.rad(86)),
+	IronSpear = CFrame.new(0, -0.1, -0.55) * CFrame.Angles(0, math.rad(90), math.rad(86)),
+}
+
+local ATTACK_GRIPS = {
+	StoneAxe = {
+		CFrame.new(0.1, -0.1, -0.2) * CFrame.Angles(math.rad(-38), math.rad(104), math.rad(122)),
+		CFrame.new(0, -0.22, -0.6) * CFrame.Angles(math.rad(44), math.rad(72), math.rad(54)),
+		CFrame.new(0, -0.15, -0.35) * CFrame.Angles(0, math.rad(90), math.rad(82)),
+	},
+	Spear = {
+		CFrame.new(0, -0.08, -0.28) * CFrame.Angles(math.rad(-8), math.rad(92), math.rad(92)),
+		CFrame.new(0, -0.08, -1.1) * CFrame.Angles(math.rad(4), math.rad(88), math.rad(88)),
+		CFrame.new(0, -0.1, -0.55) * CFrame.Angles(0, math.rad(90), math.rad(86)),
+	},
+	IronSpear = {
+		CFrame.new(0, -0.08, -0.28) * CFrame.Angles(math.rad(-8), math.rad(92), math.rad(92)),
+		CFrame.new(0, -0.08, -1.15) * CFrame.Angles(math.rad(4), math.rad(88), math.rad(88)),
+		CFrame.new(0, -0.1, -0.55) * CFrame.Angles(0, math.rad(90), math.rad(86)),
+	},
+}
+
 local function notify(player, message)
 	Remotes.get("Notification"):FireClient(player, message)
 end
@@ -55,6 +80,10 @@ end
 local function getToolName(itemId, count)
 	local displayName = getDisplayName(itemId)
 	return count > 1 and string.format("%s x%d", displayName, count) or displayName
+end
+
+local function getDefaultGrip(itemId)
+	return DEFAULT_GRIPS[itemId] or CFrame.new()
 end
 
 local function getPlayerContainers(player)
@@ -212,7 +241,33 @@ local function createToolVisual(tool, itemId)
 	end
 end
 
-local function runAction(player, itemId)
+local function playAttackAnimation(tool, itemId)
+	local sequence = ATTACK_GRIPS[itemId]
+	if not tool or not sequence or activeAnimations[tool] then
+		return
+	end
+
+	activeAnimations[tool] = true
+
+	task.spawn(function()
+		for _, grip in ipairs(sequence) do
+			if not tool.Parent then
+				break
+			end
+
+			tool.Grip = grip
+			task.wait(0.08)
+		end
+
+		if tool.Parent then
+			tool.Grip = getDefaultGrip(itemId)
+		end
+
+		activeAnimations[tool] = nil
+	end)
+end
+
+local function runAction(player, itemId, tool)
 	if not context or not context.InventoryService then
 		return
 	end
@@ -236,6 +291,7 @@ local function runAction(player, itemId)
 	end
 
 	if Config.Combat.Weapons[itemId] and context.CombatService then
+		playAttackAnimation(tool, itemId)
 		local ok, message = context.CombatService.attack(player)
 		if not ok and message then
 			notify(player, message)
@@ -275,6 +331,7 @@ local function createTool(player, itemId, count)
 	tool.ToolTip = "Survival item"
 	tool.RequiresHandle = true
 	tool.CanBeDropped = false
+	tool.Grip = getDefaultGrip(itemId)
 	tool:SetAttribute(ITEM_TOOL_ATTRIBUTE, true)
 	tool:SetAttribute(ITEM_ID_ATTRIBUTE, itemId)
 	tool:SetAttribute("Count", count)
@@ -286,7 +343,7 @@ local function createTool(player, itemId, count)
 	end)
 
 	tool.Activated:Connect(function()
-		runAction(player, itemId)
+		runAction(player, itemId, tool)
 	end)
 
 	return tool
@@ -295,6 +352,10 @@ end
 local function updateTool(tool, itemId, count)
 	tool.Name = getToolName(itemId, count)
 	tool:SetAttribute("Count", count)
+
+	if not activeAnimations[tool] then
+		tool.Grip = getDefaultGrip(itemId)
+	end
 
 	if Config.Combat.Weapons[itemId] then
 		tool.ToolTip = "Attack"

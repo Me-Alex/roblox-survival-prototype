@@ -26,9 +26,10 @@ A Rojo-compatible Roblox survival game prototype with resource gathering, hunger
 - Expanded crafting for spear, hide armor, cooked meat, antidote, survival tonic, rain collectors, workbench, forge, spike traps, signal beacons, and iron-tier gear.
 - Iron deposits, smelting, and station-gated recipes.
 - Placeable campfires and shelters that affect night-time survival.
-- Client HUD for vitals, quick consumables, inventory menu, crafting, buildables, and notifications.
+- Compact client HUD with vitals/world summary plus menu tabs for inventory, crafting, objectives, and world details.
+- Attack item grip animations for axe swings and spear thrusts.
 - Shelter rest interaction that restores health and warmth with a short cooldown and survival tradeoff.
-- World HUD for day/time/region/weather/threat, objective tracker, and attack/sprint buttons.
+- Menu tabs for day/time/region/weather/threat, objective tracking, inventory, and crafting.
 
 ## Project Layout
 

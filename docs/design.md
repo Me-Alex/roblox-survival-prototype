@@ -68,7 +68,8 @@ The player wakes up in a small wilderness area and has to survive the first nigh
 - Spike traps give base placement a defensive purpose.
 - The signal beacon creates a longer rescue objective with staged costs and escalating danger.
 - Objectives teach the survival loop and reward useful items without requiring a separate tutorial screen.
-- The HUD keeps vitals, world state, objectives, combat, sprint, and quick consumables visible while moving backpack and crafting actions into a focused inventory menu.
+- The HUD keeps only a compact vitals/world summary and right-side action rail visible; inventory, crafting, objectives, and world details live in the menu.
+- Weapon tools animate their grip on activation, giving axe swings and spear thrusts feedback without requiring external animation assets.
 
 ## Next Production Steps
 
