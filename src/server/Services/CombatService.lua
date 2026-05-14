@@ -18,12 +18,15 @@ local function getRoot(player)
 end
 
 local function getBestWeapon(player)
-	if context.InventoryService.hasItem(player, "Spear", 1) then
-		return "Spear", Config.Combat.Weapons.Spear
+	local equippedWeapon = context.InventoryService.getEquippedItem(player, "Weapon")
+	if equippedWeapon and Config.Combat.Weapons[equippedWeapon] then
+		return equippedWeapon, Config.Combat.Weapons[equippedWeapon]
 	end
 
-	if context.InventoryService.hasItem(player, "StoneAxe", 1) then
-		return "StoneAxe", Config.Combat.Weapons.StoneAxe
+	for _, weaponId in ipairs({ "IronSpear", "Spear", "StoneAxe" }) do
+		if context.InventoryService.hasItem(player, weaponId, 1) then
+			return weaponId, Config.Combat.Weapons[weaponId]
+		end
 	end
 
 	return "Fists", {
@@ -78,7 +81,17 @@ function CombatService.attack(player)
 
 	local ok, message = context.EnemyService.damageEnemy(player, enemy, weaponConfig.Damage)
 	if ok then
-		Remotes.get("Notification"):FireClient(player, string.format("%s: %s", weaponName, message))
+		if Config.Equipment[weaponName] then
+			context.InventoryService.damageEquipment(player, weaponName, 1)
+		end
+
+		if context.ProgressionService then
+			context.ProgressionService.addXP(player, Config.Progression.XP.EnemyHit, "combat")
+		end
+
+		local itemConfig = Config.Items[weaponName]
+		local displayName = itemConfig and itemConfig.DisplayName or weaponName
+		Remotes.get("Notification"):FireClient(player, string.format("%s: %s", displayName, message))
 	end
 
 	return ok, message

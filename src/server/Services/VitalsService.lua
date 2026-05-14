@@ -8,6 +8,7 @@ local VitalsService = {}
 
 local vitalsByPlayer = {}
 local context
+local random = Random.new(Config.World.Seed + 211)
 
 local function clampVital(value)
 	return math.clamp(value, 0, Config.Vitals.Max)
@@ -37,6 +38,7 @@ local function sendVitals(player)
 			Thirst = math.floor(vitals.Thirst + 0.5),
 			Temperature = math.floor(vitals.Temperature + 0.5),
 			Health = math.floor(healthPercent + 0.5),
+			Statuses = vitals.Statuses or {},
 		})
 	end
 end
@@ -47,6 +49,7 @@ local function ensureVitals(player)
 			Hunger = Config.Vitals.Max,
 			Thirst = Config.Vitals.Max,
 			Temperature = 72,
+			Statuses = {},
 		}
 	end
 
@@ -58,6 +61,28 @@ local function damage(player, amount)
 	if humanoid and humanoid.Health > 0 then
 		humanoid:TakeDamage(amount)
 	end
+end
+
+function VitalsService.applyStatus(player, statusId, durationSeconds)
+	local statusConfig = Config.StatusEffects[statusId]
+	if not statusConfig then
+		return
+	end
+
+	local vitals = ensureVitals(player)
+	vitals.Statuses[statusId] = {
+		DisplayName = statusConfig.DisplayName,
+		Remaining = durationSeconds or statusConfig.DurationSeconds,
+	}
+
+	Remotes.get("Notification"):FireClient(player, string.format("Status: %s", statusConfig.DisplayName))
+	sendVitals(player)
+end
+
+function VitalsService.removeStatus(player, statusId)
+	local vitals = ensureVitals(player)
+	vitals.Statuses[statusId] = nil
+	sendVitals(player)
 end
 
 function VitalsService.applyConsumable(player, consumable)
@@ -78,7 +103,57 @@ function VitalsService.applyConsumable(player, consumable)
 		end
 	end
 
+	if consumable.RemoveStatuses then
+		local removed = false
+
+		for statusId in pairs(consumable.RemoveStatuses) do
+			if vitals.Statuses[statusId] then
+				vitals.Statuses[statusId] = nil
+				removed = true
+			end
+		end
+
+		if removed and context and context.ProgressionService then
+			context.ProgressionService.addXP(player, Config.Progression.XP.StatusCured, "status cured")
+		end
+	end
+
+	if consumable.StatusChance then
+		for statusId, chance in pairs(consumable.StatusChance) do
+			if random:NextNumber() <= chance then
+				VitalsService.applyStatus(player, statusId)
+			end
+		end
+	end
+
 	sendVitals(player)
+end
+
+local function updateStatuses(player, vitals)
+	for statusId, statusState in pairs(vitals.Statuses) do
+		local statusConfig = Config.StatusEffects[statusId]
+		if statusConfig then
+			statusState.Remaining -= Config.Vitals.TickSeconds
+
+			if statusConfig.DamagePerTick then
+				damage(player, statusConfig.DamagePerTick)
+			end
+
+			if statusConfig.HungerLossPerTick then
+				vitals.Hunger = clampVital(vitals.Hunger - statusConfig.HungerLossPerTick)
+			end
+
+			if statusConfig.ThirstLossPerTick then
+				vitals.Thirst = clampVital(vitals.Thirst - statusConfig.ThirstLossPerTick)
+			end
+
+			if statusState.Remaining <= 0 then
+				vitals.Statuses[statusId] = nil
+			end
+		else
+			vitals.Statuses[statusId] = nil
+		end
+	end
 end
 
 local function updatePlayer(player)
@@ -107,6 +182,8 @@ local function updatePlayer(player)
 	elseif vitals.Temperature >= Config.Vitals.HotThreshold then
 		damage(player, Config.Vitals.HeatDamage)
 	end
+
+	updateStatuses(player, vitals)
 
 	sendVitals(player)
 end

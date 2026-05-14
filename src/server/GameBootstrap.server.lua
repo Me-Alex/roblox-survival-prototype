@@ -11,6 +11,7 @@ local context = {}
 context.WorldService = require(servicesFolder.WorldService)
 context.InventoryService = require(servicesFolder.InventoryService)
 context.VitalsService = require(servicesFolder.VitalsService)
+context.ProgressionService = require(servicesFolder.ProgressionService)
 context.ObjectiveService = require(servicesFolder.ObjectiveService)
 context.ResourceService = require(servicesFolder.ResourceService)
 context.CraftingService = require(servicesFolder.CraftingService)
@@ -21,6 +22,7 @@ local startupOrder = {
 	context.WorldService,
 	context.InventoryService,
 	context.VitalsService,
+	context.ProgressionService,
 	context.ObjectiveService,
 	context.ResourceService,
 	context.CraftingService,

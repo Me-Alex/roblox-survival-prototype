@@ -16,6 +16,7 @@ local RESOURCE_COLORS = {
 	FiberPlant = Color3.fromRGB(87, 138, 73),
 	BerryBush = Color3.fromRGB(55, 116, 72),
 	WaterSpring = Color3.fromRGB(74, 167, 205),
+	IronDeposit = Color3.fromRGB(112, 91, 82),
 }
 
 local function randomGroundPosition()
@@ -186,6 +187,35 @@ local function createWaterSpring(position)
 	model.Parent = resourcesFolder
 end
 
+local function createIronDeposit(position)
+	local model = Instance.new("Model")
+	model.Name = "IronDeposit"
+
+	local ore = Instance.new("Part")
+	ore.Name = "Ore"
+	ore.Anchored = true
+	ore.Shape = Enum.PartType.Ball
+	ore.Size = Vector3.new(6.5, 4.5, 5.5)
+	ore.CFrame = CFrame.new(position + Vector3.new(0, 1.4, 0))
+	ore.Color = RESOURCE_COLORS.IronDeposit
+	ore.Material = Enum.Material.Metal
+	ore.Parent = model
+
+	local vein = Instance.new("Part")
+	vein.Name = "IronVein"
+	vein.Anchored = true
+	vein.CanCollide = false
+	vein.Size = Vector3.new(5, 0.35, 0.6)
+	vein.CFrame = ore.CFrame * CFrame.Angles(0, random:NextNumber(0, math.pi), random:NextNumber(-0.5, 0.5))
+	vein.Color = Color3.fromRGB(170, 112, 81)
+	vein.Material = Enum.Material.Neon
+	vein.Parent = model
+
+	model.PrimaryPart = ore
+	createPrompt(ore, "IronDeposit", Config.Resources.IronDeposit)
+	model.Parent = resourcesFolder
+end
+
 local function spawnResource(resourceId)
 	local position = randomGroundPosition()
 
@@ -199,6 +229,8 @@ local function spawnResource(resourceId)
 		createBerryBush(position)
 	elseif resourceId == "WaterSpring" then
 		createWaterSpring(position)
+	elseif resourceId == "IronDeposit" then
+		createIronDeposit(position)
 	end
 end
 
@@ -228,11 +260,28 @@ function ResourceService.harvest(player, model, resourceId)
 
 	local inventory = context.InventoryService
 
+	if resourceConfig.RequiredTool and not inventory.hasItem(player, resourceConfig.RequiredTool, 1) then
+		Remotes.get("Notification"):FireClient(
+			player,
+			string.format("Need %s.", Config.Items[resourceConfig.RequiredTool].DisplayName)
+		)
+		return
+	end
+
 	if inventory.hasItem(player, "StoneAxe", 1) and (resourceId == "Tree" or resourceId == "FiberPlant") then
 		amount += 1
 	end
 
 	inventory.addItem(player, resourceConfig.Reward, amount)
+	if inventory.hasItem(player, "StoneAxe", 1) and (resourceId == "Tree" or resourceId == "IronDeposit") then
+		inventory.damageEquipment(player, "StoneAxe", 1)
+	end
+
+	if context.ProgressionService then
+		local xp = resourceId == "IronDeposit" and Config.Progression.XP.RareHarvest or Config.Progression.XP.Harvest
+		context.ProgressionService.addXP(player, xp, "harvesting")
+	end
+
 	Remotes.get("Notification"):FireClient(
 		player,
 		string.format("+%d %s", amount, Config.Items[resourceConfig.Reward].DisplayName)

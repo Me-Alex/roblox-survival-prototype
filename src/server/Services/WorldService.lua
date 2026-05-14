@@ -202,6 +202,9 @@ function WorldService.init(newContext)
 				if context and context.ObjectiveService then
 					for _, player in ipairs(Players:GetPlayers()) do
 						context.ObjectiveService.recordNightSurvived(player)
+						if context.ProgressionService then
+							context.ProgressionService.addXP(player, Config.Progression.XP.NightSurvived, "survived the night")
+						end
 					end
 				end
 			end

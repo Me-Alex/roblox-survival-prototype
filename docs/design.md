@@ -22,8 +22,12 @@ The player wakes up in a small wilderness area and has to survive the first nigh
 - Build
 - Attack
 - Hunt
+- Equip
+- Repair pressure through durability management
 - Seek warmth
 - Find water
+- Build crafting stations
+- Smelt ore
 - Survive nightfall
 
 ## Current Prototype Systems
@@ -33,6 +37,7 @@ The player wakes up in a small wilderness area and has to survive the first nigh
 - `InventoryService`: server inventory state, item usage, and remote sync.
 - `CraftingService`: recipe validation, crafting, and structure placement.
 - `VitalsService`: hunger, thirst, temperature, and survival damage.
+- `ProgressionService`: XP, levels, and level-up notifications.
 - `EnemyService`: night stalker spawning, pursuit, attacks, damage scaling, drops, and cleanup.
 - `CombatService`: server-validated player attacks and weapon selection.
 - `ObjectiveService`: per-player progression goals and reward grants.
@@ -44,6 +49,10 @@ The player wakes up in a small wilderness area and has to survive the first nigh
 - Water springs and rain collectors make thirst management more active than eating berries.
 - Night stalkers create a reason to prepare before dark with weapons, armor, fire, and food.
 - Defeated enemies drop raw meat and hide, feeding the cooking and armor loops.
+- Gear must be equipped to count in combat, and equipment durability creates long-run resource pressure.
+- Bleeding and poison make medical crafting matter beyond simple health restoration.
+- Workbench and forge structures create a midgame station loop.
+- Iron ore and ingots introduce a second gear tier with level requirements.
 - Objectives teach the survival loop and reward useful items without requiring a separate tutorial screen.
 
 ## Next Production Steps

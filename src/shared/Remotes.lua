@@ -8,10 +8,12 @@ local DEFINITIONS = {
 	VitalsUpdated = "RemoteEvent",
 	WorldStateUpdated = "RemoteEvent",
 	ObjectiveUpdated = "RemoteEvent",
+	ProgressionUpdated = "RemoteEvent",
 	Notification = "RemoteEvent",
 	CraftRequest = "RemoteFunction",
 	ConsumeRequest = "RemoteFunction",
 	BuildRequest = "RemoteFunction",
+	EquipRequest = "RemoteFunction",
 	AttackRequest = "RemoteFunction",
 	GetInventory = "RemoteFunction",
 }

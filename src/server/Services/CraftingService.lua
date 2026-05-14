@@ -140,6 +140,80 @@ local function createRainCollector(cframe)
 	return model
 end
 
+local function createWorkbench(cframe)
+	local model = Instance.new("Model")
+	model.Name = "Workbench"
+
+	local top = Instance.new("Part")
+	top.Name = "BenchTop"
+	top.Anchored = true
+	top.Size = Vector3.new(9, 1, 4)
+	top.CFrame = cframe * CFrame.new(0, 2.6, 0)
+	top.Color = Color3.fromRGB(96, 65, 42)
+	top.Material = Enum.Material.WoodPlanks
+	top.Parent = model
+
+	for x = -1, 1, 2 do
+		for z = -1, 1, 2 do
+			local leg = Instance.new("Part")
+			leg.Name = "Leg"
+			leg.Anchored = true
+			leg.Size = Vector3.new(0.6, 2.5, 0.6)
+			leg.CFrame = cframe * CFrame.new(x * 3.8, 1.2, z * 1.5)
+			leg.Color = Color3.fromRGB(78, 50, 34)
+			leg.Material = Enum.Material.Wood
+			leg.Parent = model
+		end
+	end
+
+	model.PrimaryPart = top
+	return model
+end
+
+local function createForge(cframe)
+	local model = Instance.new("Model")
+	model.Name = "Forge"
+
+	local body = Instance.new("Part")
+	body.Name = "StoneBody"
+	body.Anchored = true
+	body.Size = Vector3.new(7, 4, 6)
+	body.CFrame = cframe * CFrame.new(0, 2, 0)
+	body.Color = Color3.fromRGB(83, 82, 80)
+	body.Material = Enum.Material.Slate
+	body.Parent = model
+
+	local heat = Instance.new("Part")
+	heat.Name = "Heat"
+	heat.Anchored = true
+	heat.CanCollide = false
+	heat.Size = Vector3.new(4.5, 1, 3.5)
+	heat.CFrame = cframe * CFrame.new(0, 2.2, -0.2)
+	heat.Color = Color3.fromRGB(255, 104, 42)
+	heat.Material = Enum.Material.Neon
+	heat.Parent = model
+
+	local light = Instance.new("PointLight")
+	light.Name = "ForgeLight"
+	light.Brightness = 2.6
+	light.Range = 18
+	light.Color = Color3.fromRGB(255, 138, 71)
+	light.Parent = heat
+
+	model.PrimaryPart = body
+	return model
+end
+
+local function getStructureRadius(modelName)
+	for _, buildable in pairs(Config.Buildables) do
+		if buildable.ModelName == modelName then
+			return buildable.Radius
+		end
+	end
+
+	return 16
+end
+
 local function missingItemMessage(itemId)
 	local itemConfig = Config.Items[itemId]
 	local displayName = itemConfig and itemConfig.DisplayName or itemId
@@ -152,15 +226,23 @@ function CraftingService.craft(player, recipeId)
 		return false, "Unknown recipe."
 	end
 
-	if recipe.RequiresNearby == "Campfire" then
-		local nearCampfire = context.WorldService.isNearStructure(
+	if recipe.RequiredLevel and context.ProgressionService then
+		local level = context.ProgressionService.getLevel(player)
+
+		if level < recipe.RequiredLevel then
+			return false, string.format("Requires level %d.", recipe.RequiredLevel)
+		end
+	end
+
+	if recipe.RequiresNearby then
+		local nearStructure = context.WorldService.isNearStructure(
 			player,
-			"Campfire",
-			Config.Buildables.CampfireKit.Radius
+			recipe.RequiresNearby,
+			getStructureRadius(recipe.RequiresNearby)
 		)
 
-		if not nearCampfire then
-			return false, "You need to stand near a campfire."
+		if not nearStructure then
+			return false, string.format("Stand near a %s.", recipe.RequiresNearby)
 		end
 	end
 
@@ -173,6 +255,9 @@ function CraftingService.craft(player, recipeId)
 	context.InventoryService.addItem(player, recipe.Result, recipe.Amount or 1)
 	if context.ObjectiveService then
 		context.ObjectiveService.recordCrafted(player, recipe.Result, recipe.Amount or 1)
+	end
+	if context.ProgressionService then
+		context.ProgressionService.addXP(player, Config.Progression.XP.Craft, "crafting")
 	end
 	notify(player, string.format("Crafted %s.", recipe.DisplayName))
 
@@ -204,6 +289,10 @@ function CraftingService.build(player, itemId)
 		model = createShelter(cframe)
 	elseif itemId == "RainCollectorKit" then
 		model = createRainCollector(cframe)
+	elseif itemId == "WorkbenchKit" then
+		model = createWorkbench(cframe)
+	elseif itemId == "ForgeKit" then
+		model = createForge(cframe)
 	end
 
 	if not model then
@@ -214,6 +303,9 @@ function CraftingService.build(player, itemId)
 	model.Parent = context.WorldService.getStructuresFolder()
 	if context.ObjectiveService then
 		context.ObjectiveService.recordBuilt(player, model.Name)
+	end
+	if context.ProgressionService then
+		context.ProgressionService.addXP(player, Config.Progression.XP.Build, "base building")
 	end
 
 	if buildable.LifetimeSeconds and buildable.LifetimeSeconds > 0 then

@@ -13,9 +13,13 @@ A Rojo-compatible Roblox survival game prototype with resource gathering, hunger
 - Drinkable water springs and placeable rain collectors.
 - Night stalkers that spawn after dark, chase players, attack, and drop hide/raw meat.
 - Server-validated attack action with fists, stone axe, and spear damage tiers.
+- Explicit equipment for weapons and armor, with durability loss and breakage.
+- Bleeding and poison status effects with medical cures.
+- XP and level progression from harvesting, crafting, building, combat, and surviving nights.
 - Objective progression with rewards for gathering, crafting, building, hunting, and surviving the night.
 - Crafting for tools, food, bandages, campfires, and shelter kits.
-- Expanded crafting for spear, hide armor, cooked meat, survival tonic, and rain collectors.
+- Expanded crafting for spear, hide armor, cooked meat, antidote, survival tonic, rain collectors, workbench, forge, and iron-tier gear.
+- Iron deposits, smelting, and station-gated recipes.
 - Placeable campfires and shelters that affect night-time survival.
 - Client HUD for vitals, inventory, consumables, buildables, crafting, and notifications.
 - World HUD for day/time/weather, objective tracker, and an attack button.
@@ -62,10 +66,13 @@ This repository is designed to live on GitHub as source code. Clone it on anothe
 - Gather wood, stone, fiber, and berries.
 - Craft a `Stone Axe`, then compare wood/fiber gathering speed.
 - Craft a `Spear` before nightfall.
+- Equip crafted weapons and armor from the `GEAR` panel.
 - Craft and place a `Campfire Kit` before night.
+- Build a `Workbench Kit`, then use it to unlock the forge and iron tier.
 - Stand near the campfire at night and watch temperature stabilize.
 - Fight night stalkers with `F` or the `Attack` button.
 - Cook dropped `Raw Meat` near a campfire.
+- Cure bleeding or poison with `Bandage`, `Antidote`, or `Survival Tonic`.
 - Craft `Cooked Berries` near the campfire and use them from the HUD.
 - Build a shelter and verify cold exposure is less punishing nearby.
 - Place a `Rain Collector Kit` and use it as backup drinking water.

@@ -147,13 +147,10 @@ end
 
 local function getDamageForPlayer(player, baseDamage)
 	local damage = baseDamage
+	local armorId = context.InventoryService and context.InventoryService.getEquippedItem(player, "Armor") or nil
 
-	if context.InventoryService then
-		for armorId, armorConfig in pairs(Config.Combat.Armor) do
-			if context.InventoryService.hasItem(player, armorId, 1) then
-				damage *= armorConfig.DamageMultiplier
-			end
-		end
+	if armorId and Config.Combat.Armor[armorId] then
+		damage *= Config.Combat.Armor[armorId].DamageMultiplier
 	end
 
 	return damage
@@ -204,6 +201,14 @@ local function moveEnemy(enemy, deltaTime)
 
 			if humanoid then
 				humanoid:TakeDamage(getDamageForPlayer(targetPlayer, enemyConfig.Damage))
+
+				if context.InventoryService then
+					context.InventoryService.damageEquippedArmor(targetPlayer, 2)
+				end
+
+				if context.VitalsService and random:NextNumber() <= (enemyConfig.BleedChance or 0) then
+					context.VitalsService.applyStatus(targetPlayer, "Bleeding")
+				end
 			end
 		end
 	end
@@ -249,6 +254,10 @@ function EnemyService.damageEnemy(player, enemy, amount)
 
 		if context.ObjectiveService then
 			context.ObjectiveService.recordEnemyDefeated(player)
+		end
+
+		if context.ProgressionService then
+			context.ProgressionService.addXP(player, Config.Progression.XP.EnemyDefeat, "enemy defeated")
 		end
 
 		return true, "Defeated Night Stalker."

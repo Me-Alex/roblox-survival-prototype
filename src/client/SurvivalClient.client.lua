@@ -10,11 +10,19 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 local inventory = {}
+local equipment = {}
+local durability = {}
 local vitals = {
 	Hunger = 100,
 	Thirst = 100,
 	Temperature = 72,
 	Health = 100,
+	Statuses = {},
+}
+local progression = {
+	Level = 1,
+	XP = 0,
+	NextLevelXP = 80,
 }
 local worldState = {
 	Day = 1,
@@ -45,7 +53,7 @@ vitalsPanel.BackgroundColor3 = Color3.fromRGB(24, 28, 30)
 vitalsPanel.BackgroundTransparency = 0.12
 vitalsPanel.BorderSizePixel = 0
 vitalsPanel.Position = UDim2.fromOffset(18, 18)
-vitalsPanel.Size = UDim2.fromOffset(270, 136)
+vitalsPanel.Size = UDim2.fromOffset(270, 162)
 vitalsPanel.Parent = root
 
 local vitalsCorner = Instance.new("UICorner")
@@ -90,7 +98,7 @@ worldPanel.BackgroundColor3 = Color3.fromRGB(24, 28, 30)
 worldPanel.BackgroundTransparency = 0.12
 worldPanel.BorderSizePixel = 0
 worldPanel.Position = UDim2.new(1, -18, 0, 18)
-worldPanel.Size = UDim2.fromOffset(250, 92)
+worldPanel.Size = UDim2.fromOffset(250, 120)
 worldPanel.Parent = root
 
 local worldCorner = Instance.new("UICorner")
@@ -120,7 +128,7 @@ objectivePanel.Name = "Objectives"
 objectivePanel.BackgroundColor3 = Color3.fromRGB(24, 28, 30)
 objectivePanel.BackgroundTransparency = 0.12
 objectivePanel.BorderSizePixel = 0
-objectivePanel.Position = UDim2.fromOffset(18, 168)
+objectivePanel.Position = UDim2.fromOffset(18, 194)
 objectivePanel.Size = UDim2.fromOffset(330, 230)
 objectivePanel.Parent = root
 
@@ -208,6 +216,18 @@ makeVitalBar("Hunger", 38, Color3.fromRGB(222, 177, 75))
 makeVitalBar("Thirst", 62, Color3.fromRGB(76, 172, 222))
 makeVitalBar("Temperature", 86, Color3.fromRGB(226, 104, 72))
 makeVitalBar("Health", 110, Color3.fromRGB(207, 74, 91))
+
+local statusText = Instance.new("TextLabel")
+statusText.Name = "StatusText"
+statusText.BackgroundTransparency = 1
+statusText.Font = Enum.Font.GothamMedium
+statusText.Text = "Status  Stable"
+statusText.TextColor3 = Color3.fromRGB(214, 220, 210)
+statusText.TextSize = 12
+statusText.TextXAlignment = Enum.TextXAlignment.Left
+statusText.Position = UDim2.fromOffset(14, 134)
+statusText.Size = UDim2.new(1, -28, 0, 18)
+statusText.Parent = vitalsPanel
 
 local inventoryList = Instance.new("ScrollingFrame")
 inventoryList.Name = "InventoryList"
@@ -301,6 +321,14 @@ local function updateVitals()
 		bar.Label.Text = string.format("%s  %d", name, value)
 		bar.Fill.Size = UDim2.fromScale(percent, 1)
 	end
+
+	local statuses = {}
+	for _, statusState in pairs(vitals.Statuses or {}) do
+		table.insert(statuses, statusState.DisplayName or "Unknown")
+	end
+	table.sort(statuses)
+
+	statusText.Text = #statuses > 0 and ("Status  " .. table.concat(statuses, ", ")) or "Status  Stable"
 end
 
 local function clearChildren(frame)
@@ -321,6 +349,20 @@ local function formatCost(cost)
 
 	table.sort(parts)
 	return table.concat(parts, "  ")
+end
+
+local function formatRecipeDetails(recipe)
+	local details = { formatCost(recipe.Cost) }
+
+	if recipe.RequiredLevel then
+		table.insert(details, string.format("Lvl %d", recipe.RequiredLevel))
+	end
+
+	if recipe.RequiresNearby then
+		table.insert(details, recipe.RequiresNearby)
+	end
+
+	return table.concat(details, "  ")
 end
 
 local function canAfford(cost)
@@ -354,10 +396,31 @@ local function requestBuild(itemId)
 	end
 end
 
+local function requestEquip(itemId)
+	local ok, message = Remotes.get("EquipRequest"):InvokeServer(itemId)
+	if message then
+		showNotification(message)
+	elseif not ok then
+		showNotification("Could not equip item.")
+	end
+end
+
 local function requestAttack()
 	local ok, message = Remotes.get("AttackRequest"):InvokeServer()
 	if not ok and message then
 		showNotification(message)
+	end
+end
+
+local function applyInventorySnapshot(snapshot)
+	if snapshot.Items then
+		inventory = snapshot.Items
+		equipment = snapshot.Equipped or {}
+		durability = snapshot.Durability or {}
+	else
+		inventory = snapshot
+		equipment = {}
+		durability = {}
 	end
 end
 
@@ -374,6 +437,7 @@ local function renderInventory()
 		local count = inventory[itemId] or 0
 		if count > 0 then
 			local itemConfig = Config.Items[itemId]
+			local equipmentConfig = Config.Equipment[itemId]
 			local row = Instance.new("Frame")
 			row.BackgroundColor3 = Color3.fromRGB(38, 43, 44)
 			row.BorderSizePixel = 0
@@ -387,7 +451,12 @@ local function renderInventory()
 			local label = Instance.new("TextLabel")
 			label.BackgroundTransparency = 1
 			label.Font = Enum.Font.GothamMedium
-			label.Text = string.format("%s  x%d", itemConfig.DisplayName, count)
+			local labelText = string.format("%s  x%d", itemConfig.DisplayName, count)
+			if equipmentConfig then
+				local durabilityValue = durability[itemId] or equipmentConfig.MaxDurability
+				labelText = string.format("%s  %d/%d", labelText, durabilityValue, equipmentConfig.MaxDurability)
+			end
+			label.Text = labelText
 			label.TextColor3 = Color3.fromRGB(235, 238, 229)
 			label.TextSize = 13
 			label.TextXAlignment = Enum.TextXAlignment.Left
@@ -395,7 +464,17 @@ local function renderInventory()
 			label.Size = UDim2.new(1, -150, 1, 0)
 			label.Parent = row
 
-			if Config.Consumables[itemId] then
+			if equipmentConfig then
+				local equipped = equipment[equipmentConfig.Slot] == itemId
+				local equipButton = makeButton(equipped and "Equipped" or "Equip", 76)
+				equipButton.AnchorPoint = Vector2.new(1, 0.5)
+				equipButton.Position = UDim2.new(1, -8, 0.5, 0)
+				equipButton.BackgroundColor3 = equipped and Color3.fromRGB(92, 122, 82) or Color3.fromRGB(72, 96, 88)
+				equipButton.Parent = row
+				equipButton.Activated:Connect(function()
+					requestEquip(itemId)
+				end)
+			elseif Config.Consumables[itemId] then
 				local useButton = makeButton("Use", 58)
 				useButton.AnchorPoint = Vector2.new(1, 0.5)
 				useButton.Position = UDim2.new(1, -8, 0.5, 0)
@@ -451,7 +530,7 @@ local function renderCrafting()
 		local cost = Instance.new("TextLabel")
 		cost.BackgroundTransparency = 1
 		cost.Font = Enum.Font.Gotham
-		cost.Text = formatCost(recipe.Cost)
+		cost.Text = formatRecipeDetails(recipe)
 		cost.TextColor3 = Color3.fromRGB(187, 194, 185)
 		cost.TextSize = 11
 		cost.TextXAlignment = Enum.TextXAlignment.Left
@@ -473,11 +552,14 @@ end
 local function renderWorldState()
 	local phase = worldState.IsNight and "Night" or "Daylight"
 	worldDetails.Text = string.format(
-		"Day %d   %s\n%s\n%s",
+		"Day %d   %s\n%s\n%s\nLevel %d  XP %d/%s",
 		worldState.Day or 1,
 		worldState.Clock or "00:00",
 		worldState.Weather or "Clear",
-		phase
+		phase,
+		progression.Level or 1,
+		progression.XP or 0,
+		progression.NextLevelXP and tostring(progression.NextLevelXP) or "max"
 	)
 end
 
@@ -547,7 +629,7 @@ Remotes.get("VitalsUpdated").OnClientEvent:Connect(function(newVitals)
 end)
 
 Remotes.get("InventoryUpdated").OnClientEvent:Connect(function(newInventory)
-	inventory = newInventory
+	applyInventorySnapshot(newInventory)
 	renderAll()
 end)
 
@@ -559,6 +641,11 @@ end)
 Remotes.get("ObjectiveUpdated").OnClientEvent:Connect(function(newObjectiveSnapshot)
 	objectiveSnapshot = newObjectiveSnapshot
 	renderObjectives()
+end)
+
+Remotes.get("ProgressionUpdated").OnClientEvent:Connect(function(newProgression)
+	progression = newProgression
+	renderWorldState()
 end)
 
 Remotes.get("Notification").OnClientEvent:Connect(showNotification)
@@ -581,7 +668,7 @@ task.spawn(function()
 	end)
 
 	if ok and type(result) == "table" then
-		inventory = result
+		applyInventorySnapshot(result)
 	end
 
 	renderAll()

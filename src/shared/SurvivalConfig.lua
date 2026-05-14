@@ -31,18 +31,25 @@ SurvivalConfig.Items = {
 	Stone = { DisplayName = "Stone", Category = "Resource" },
 	Fiber = { DisplayName = "Fiber", Category = "Resource" },
 	Hide = { DisplayName = "Hide", Category = "Resource" },
+	IronOre = { DisplayName = "Iron Ore", Category = "Resource" },
+	IronIngot = { DisplayName = "Iron Ingot", Category = "Resource" },
 	RawMeat = { DisplayName = "Raw Meat", Category = "Food" },
 	Berries = { DisplayName = "Berries", Category = "Food" },
 	CookedBerries = { DisplayName = "Cooked Berries", Category = "Food" },
 	CookedMeat = { DisplayName = "Cooked Meat", Category = "Food" },
 	Bandage = { DisplayName = "Bandage", Category = "Medical" },
+	Antidote = { DisplayName = "Antidote", Category = "Medical" },
 	SurvivalTonic = { DisplayName = "Survival Tonic", Category = "Medical" },
 	StoneAxe = { DisplayName = "Stone Axe", Category = "Tool" },
 	Spear = { DisplayName = "Spear", Category = "Weapon" },
+	IronSpear = { DisplayName = "Iron Spear", Category = "Weapon" },
 	HideArmor = { DisplayName = "Hide Armor", Category = "Armor" },
+	IronArmor = { DisplayName = "Iron Armor", Category = "Armor" },
 	CampfireKit = { DisplayName = "Campfire Kit", Category = "Buildable" },
 	ShelterKit = { DisplayName = "Shelter Kit", Category = "Buildable" },
 	RainCollectorKit = { DisplayName = "Rain Collector Kit", Category = "Buildable" },
+	WorkbenchKit = { DisplayName = "Workbench Kit", Category = "Buildable" },
+	ForgeKit = { DisplayName = "Forge Kit", Category = "Buildable" },
 }
 
 SurvivalConfig.Resources = {
@@ -91,6 +98,16 @@ SurvivalConfig.Resources = {
 		RespawnSeconds = 14,
 		HarvestText = "Drink",
 	},
+	IronDeposit = {
+		DisplayName = "Iron Deposit",
+		Reward = "IronOre",
+		MinAmount = 1,
+		MaxAmount = 3,
+		SpawnCount = 10,
+		RespawnSeconds = 95,
+		HarvestText = "Mine",
+		RequiredTool = "StoneAxe",
+	},
 }
 
 SurvivalConfig.Crafting = {
@@ -108,12 +125,55 @@ SurvivalConfig.Crafting = {
 		Amount = 1,
 		Description = "A longer reach weapon for night stalkers.",
 	},
+	WorkbenchKit = {
+		DisplayName = "Workbench Kit",
+		Cost = { Wood = 8, Stone = 4, Fiber = 3 },
+		Result = "WorkbenchKit",
+		Amount = 1,
+		Description = "Unlocks advanced weapons, armor, and crafting stations.",
+	},
+	ForgeKit = {
+		DisplayName = "Forge Kit",
+		Cost = { Stone = 12, Wood = 5 },
+		Result = "ForgeKit",
+		Amount = 1,
+		RequiresNearby = "Workbench",
+		RequiredLevel = 2,
+		Description = "Smelts ore into ingots.",
+	},
+	IronIngot = {
+		DisplayName = "Iron Ingot",
+		Cost = { IronOre = 3, Wood = 1 },
+		Result = "IronIngot",
+		Amount = 1,
+		RequiresNearby = "Forge",
+		RequiredLevel = 2,
+		Description = "Refined metal for stronger gear.",
+	},
+	IronSpear = {
+		DisplayName = "Iron Spear",
+		Cost = { IronIngot = 3, Wood = 2, Fiber = 2 },
+		Result = "IronSpear",
+		Amount = 1,
+		RequiresNearby = "Workbench",
+		RequiredLevel = 3,
+		Description = "A durable weapon for longer nights.",
+	},
 	HideArmor = {
 		DisplayName = "Hide Armor",
 		Cost = { Hide = 4, Fiber = 4 },
 		Result = "HideArmor",
 		Amount = 1,
 		Description = "Reduces damage from enemies.",
+	},
+	IronArmor = {
+		DisplayName = "Iron Armor",
+		Cost = { IronIngot = 5, Hide = 2, Fiber = 3 },
+		Result = "IronArmor",
+		Amount = 1,
+		RequiresNearby = "Workbench",
+		RequiredLevel = 4,
+		Description = "Heavy armor with strong protection and durability.",
 	},
 	CampfireKit = {
 		DisplayName = "Campfire Kit",
@@ -159,6 +219,14 @@ SurvivalConfig.Crafting = {
 		Amount = 1,
 		Description = "Restores health over time.",
 	},
+	Antidote = {
+		DisplayName = "Antidote",
+		Cost = { Berries = 3, Fiber = 2 },
+		Result = "Antidote",
+		Amount = 1,
+		RequiresNearby = "Campfire",
+		Description = "Cures poison and bleeding.",
+	},
 	SurvivalTonic = {
 		DisplayName = "Survival Tonic",
 		Cost = { Berries = 2, Fiber = 2 },
@@ -169,6 +237,12 @@ SurvivalConfig.Crafting = {
 }
 
 SurvivalConfig.Consumables = {
+	RawMeat = {
+		Hunger = 18,
+		Thirst = -8,
+		StatusChance = { Poisoned = 0.35 },
+		Notify = "Raw meat helps, but it is risky.",
+	},
 	Berries = {
 		Hunger = 10,
 		Thirst = 5,
@@ -186,12 +260,19 @@ SurvivalConfig.Consumables = {
 	},
 	Bandage = {
 		Health = 35,
+		RemoveStatuses = { Bleeding = true },
 		Notify = "You patched yourself up.",
+	},
+	Antidote = {
+		RemoveStatuses = { Bleeding = true, Poisoned = true },
+		Health = 8,
+		Notify = "The antidote clears your blood.",
 	},
 	SurvivalTonic = {
 		Hunger = 14,
 		Thirst = 30,
 		Health = 18,
+		RemoveStatuses = { Bleeding = true, Poisoned = true },
 		Notify = "The tonic steadies your body.",
 	},
 }
@@ -215,6 +296,55 @@ SurvivalConfig.Buildables = {
 		Radius = 12,
 		LifetimeSeconds = 0,
 		DrinkThirst = 26,
+	},
+	WorkbenchKit = {
+		ModelName = "Workbench",
+		DisplayName = "Workbench",
+		Radius = 18,
+		LifetimeSeconds = 0,
+	},
+	ForgeKit = {
+		ModelName = "Forge",
+		DisplayName = "Forge",
+		Radius = 18,
+		LifetimeSeconds = 0,
+	},
+}
+
+SurvivalConfig.Equipment = {
+	StoneAxe = { Slot = "Weapon", MaxDurability = 45 },
+	Spear = { Slot = "Weapon", MaxDurability = 64 },
+	IronSpear = { Slot = "Weapon", MaxDurability = 120 },
+	HideArmor = { Slot = "Armor", MaxDurability = 95 },
+	IronArmor = { Slot = "Armor", MaxDurability = 170 },
+}
+
+SurvivalConfig.Progression = {
+	LevelThresholds = { 0, 80, 190, 340, 540, 790, 1100 },
+	XP = {
+		Harvest = 4,
+		RareHarvest = 8,
+		Craft = 12,
+		Build = 18,
+		EnemyHit = 4,
+		EnemyDefeat = 38,
+		NightSurvived = 52,
+		StatusCured = 10,
+	},
+}
+
+SurvivalConfig.StatusEffects = {
+	Bleeding = {
+		DisplayName = "Bleeding",
+		DurationSeconds = 20,
+		DamagePerTick = 2,
+	},
+	Poisoned = {
+		DisplayName = "Poisoned",
+		DurationSeconds = 34,
+		DamagePerTick = 2,
+		HungerLossPerTick = 0.6,
+		ThirstLossPerTick = 0.9,
 	},
 }
 
@@ -268,9 +398,11 @@ SurvivalConfig.Combat = {
 	Weapons = {
 		StoneAxe = { Damage = 16, Range = 12 },
 		Spear = { Damage = 26, Range = 17 },
+		IronSpear = { Damage = 38, Range = 18 },
 	},
 	Armor = {
 		HideArmor = { DamageMultiplier = 0.65 },
+		IronArmor = { DamageMultiplier = 0.45 },
 	},
 }
 
@@ -284,6 +416,7 @@ SurvivalConfig.Enemies = {
 		MoveSpeed = 18,
 		SpawnEverySeconds = 16,
 		MaxAlive = 7,
+		BleedChance = 0.18,
 		Drop = {
 			RawMeat = { Min = 1, Max = 2 },
 			Hide = { Min = 1, Max = 2 },
@@ -308,10 +441,17 @@ SurvivalConfig.Objectives = {
 	},
 	BuildCamp = {
 		DisplayName = "Hold The Camp",
-		Description = "Place a campfire and shelter.",
+		Description = "Place a campfire, shelter, and workbench.",
 		Kind = "Build",
-		Requirements = { Campfire = 1, Shelter = 1 },
+		Requirements = { Campfire = 1, Shelter = 1, Workbench = 1 },
 		Reward = { SurvivalTonic = 1 },
+	},
+	ForgeIron = {
+		DisplayName = "Iron Age",
+		Description = "Place a forge and craft an iron spear.",
+		Kind = "Craft",
+		Requirements = { ForgeKit = 1, IronSpear = 1 },
+		Reward = { Antidote = 2 },
 	},
 	HuntStalkers = {
 		DisplayName = "Night Hunter",
