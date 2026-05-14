@@ -1,5 +1,6 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
 
@@ -19,6 +20,8 @@ local vitals = {
 	Health = 100,
 	Statuses = {},
 }
+local stamina = Config.Movement.StaminaMax
+local sprintRequested = false
 local progression = {
 	Level = 1,
 	XP = 0,
@@ -27,6 +30,7 @@ local progression = {
 local worldState = {
 	Day = 1,
 	Clock = "09:00",
+	Region = "Base Meadow",
 	Weather = "Clear",
 	IsNight = false,
 }
@@ -53,7 +57,7 @@ vitalsPanel.BackgroundColor3 = Color3.fromRGB(24, 28, 30)
 vitalsPanel.BackgroundTransparency = 0.12
 vitalsPanel.BorderSizePixel = 0
 vitalsPanel.Position = UDim2.fromOffset(18, 18)
-vitalsPanel.Size = UDim2.fromOffset(270, 162)
+vitalsPanel.Size = UDim2.fromOffset(270, 186)
 vitalsPanel.Parent = root
 
 local vitalsCorner = Instance.new("UICorner")
@@ -98,7 +102,7 @@ worldPanel.BackgroundColor3 = Color3.fromRGB(24, 28, 30)
 worldPanel.BackgroundTransparency = 0.12
 worldPanel.BorderSizePixel = 0
 worldPanel.Position = UDim2.new(1, -18, 0, 18)
-worldPanel.Size = UDim2.fromOffset(250, 120)
+worldPanel.Size = UDim2.fromOffset(250, 154)
 worldPanel.Parent = root
 
 local worldCorner = Instance.new("UICorner")
@@ -128,7 +132,7 @@ objectivePanel.Name = "Objectives"
 objectivePanel.BackgroundColor3 = Color3.fromRGB(24, 28, 30)
 objectivePanel.BackgroundTransparency = 0.12
 objectivePanel.BorderSizePixel = 0
-objectivePanel.Position = UDim2.fromOffset(18, 194)
+objectivePanel.Position = UDim2.fromOffset(18, 218)
 objectivePanel.Size = UDim2.fromOffset(330, 230)
 objectivePanel.Parent = root
 
@@ -216,6 +220,7 @@ makeVitalBar("Hunger", 38, Color3.fromRGB(222, 177, 75))
 makeVitalBar("Thirst", 62, Color3.fromRGB(76, 172, 222))
 makeVitalBar("Temperature", 86, Color3.fromRGB(226, 104, 72))
 makeVitalBar("Health", 110, Color3.fromRGB(207, 74, 91))
+makeVitalBar("Stamina", 134, Color3.fromRGB(111, 198, 121))
 
 local statusText = Instance.new("TextLabel")
 statusText.Name = "StatusText"
@@ -225,7 +230,7 @@ statusText.Text = "Status  Stable"
 statusText.TextColor3 = Color3.fromRGB(214, 220, 210)
 statusText.TextSize = 12
 statusText.TextXAlignment = Enum.TextXAlignment.Left
-statusText.Position = UDim2.fromOffset(14, 134)
+statusText.Position = UDim2.fromOffset(14, 158)
 statusText.Size = UDim2.new(1, -28, 0, 18)
 statusText.Parent = vitalsPanel
 
@@ -302,6 +307,15 @@ attackButton.Size = UDim2.fromOffset(110, 36)
 attackButton.TextSize = 14
 attackButton.Parent = root
 
+local sprintButton = makeButton("Sprint", 110)
+sprintButton.Name = "SprintButton"
+sprintButton.AnchorPoint = Vector2.new(0.5, 1)
+sprintButton.BackgroundColor3 = Color3.fromRGB(70, 92, 72)
+sprintButton.Position = UDim2.new(0.5, -124, 1, -28)
+sprintButton.Size = UDim2.fromOffset(110, 36)
+sprintButton.TextSize = 14
+sprintButton.Parent = root
+
 local function showNotification(message)
 	notification.Text = message
 	notification.Visible = true
@@ -313,13 +327,21 @@ local function showNotification(message)
 	end)
 end
 
-local function updateVitals()
-	for name, bar in pairs(vitalBars) do
-		local value = vitals[name] or 0
-		local percent = name == "Temperature" and math.clamp(value / 100, 0, 1) or math.clamp(value / 100, 0, 1)
+local function updateVitalBar(name, value)
+	local bar = vitalBars[name]
+	if not bar then
+		return
+	end
 
-		bar.Label.Text = string.format("%s  %d", name, value)
-		bar.Fill.Size = UDim2.fromScale(percent, 1)
+	local percent = math.clamp(value / 100, 0, 1)
+	bar.Label.Text = string.format("%s  %d", name, value)
+	bar.Fill.Size = UDim2.fromScale(percent, 1)
+end
+
+local function updateVitals()
+	for name in pairs(vitalBars) do
+		local value = name == "Stamina" and stamina or (vitals[name] or 0)
+		updateVitalBar(name, math.floor(value + 0.5))
 	end
 
 	local statuses = {}
@@ -551,15 +573,18 @@ end
 
 local function renderWorldState()
 	local phase = worldState.IsNight and "Night" or "Daylight"
+	local threatLine = worldState.Threat and string.format("\nThreat %d/100", worldState.Threat) or ""
 	worldDetails.Text = string.format(
-		"Day %d   %s\n%s\n%s\nLevel %d  XP %d/%s",
+		"Day %d   %s\n%s\n%s\n%s\nLevel %d  XP %d/%s%s",
 		worldState.Day or 1,
 		worldState.Clock or "00:00",
+		worldState.Region or "Wilderness",
 		worldState.Weather or "Clear",
 		phase,
 		progression.Level or 1,
 		progression.XP or 0,
-		progression.NextLevelXP and tostring(progression.NextLevelXP) or "max"
+		progression.NextLevelXP and tostring(progression.NextLevelXP) or "max",
+		threatLine
 	)
 end
 
@@ -623,6 +648,43 @@ local function renderAll()
 	renderCrafting()
 end
 
+local function setSprintRequested(requested)
+	sprintRequested = requested
+	sprintButton.BackgroundColor3 = requested and Color3.fromRGB(91, 130, 82) or Color3.fromRGB(70, 92, 72)
+end
+
+local function getHumanoid()
+	local character = player.Character
+	if not character then
+		return nil
+	end
+
+	return character:FindFirstChildOfClass("Humanoid")
+end
+
+local function updateSprint(deltaTime)
+	local humanoid = getHumanoid()
+	if not humanoid then
+		return
+	end
+
+	local moving = humanoid.MoveDirection.Magnitude > 0.05
+	local canSprint = sprintRequested
+		and moving
+		and stamina > Config.Movement.ExhaustedThreshold
+		and humanoid.Health > 0
+
+	if canSprint then
+		stamina = math.max(0, stamina - Config.Movement.SprintDrainPerSecond * deltaTime)
+		humanoid.WalkSpeed = Config.Movement.SprintSpeed
+	else
+		stamina = math.min(Config.Movement.StaminaMax, stamina + Config.Movement.StaminaRegenPerSecond * deltaTime)
+		humanoid.WalkSpeed = Config.Movement.WalkSpeed
+	end
+
+	updateVitalBar("Stamina", math.floor(stamina + 0.5))
+end
+
 Remotes.get("VitalsUpdated").OnClientEvent:Connect(function(newVitals)
 	vitals = newVitals
 	updateVitals()
@@ -659,8 +721,30 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 
 	if input.KeyCode == Enum.KeyCode.F then
 		requestAttack()
+	elseif input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
+		setSprintRequested(true)
 	end
 end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
+		setSprintRequested(false)
+	end
+end)
+
+sprintButton.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		setSprintRequested(true)
+	end
+end)
+
+sprintButton.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		setSprintRequested(false)
+	end
+end)
+
+RunService.RenderStepped:Connect(updateSprint)
 
 task.spawn(function()
 	local ok, result = pcall(function()

@@ -17,6 +17,8 @@ local RESOURCE_COLORS = {
 	BerryBush = Color3.fromRGB(55, 116, 72),
 	WaterSpring = Color3.fromRGB(74, 167, 205),
 	IronDeposit = Color3.fromRGB(112, 91, 82),
+	HerbPatch = Color3.fromRGB(84, 142, 91),
+	LootCache = Color3.fromRGB(121, 98, 62),
 }
 
 local function randomGroundPosition()
@@ -28,6 +30,51 @@ local function randomGroundPosition()
 	)
 end
 
+local function randomPositionNear(center, radius)
+	local angle = random:NextNumber(0, math.pi * 2)
+	local distance = math.sqrt(random:NextNumber()) * radius
+
+	return Vector3.new(
+		center.X + math.cos(angle) * distance,
+		1.6,
+		center.Z + math.sin(angle) * distance
+	)
+end
+
+local function chooseRegionForResource(resourceId)
+	local totalWeight = 0
+
+	for _, region in ipairs(Config.Regions) do
+		totalWeight += (region.Resources and region.Resources[resourceId]) or 0
+	end
+
+	if totalWeight <= 0 then
+		return nil
+	end
+
+	local roll = random:NextNumber(0, totalWeight)
+	local running = 0
+
+	for _, region in ipairs(Config.Regions) do
+		running += (region.Resources and region.Resources[resourceId]) or 0
+
+		if roll <= running then
+			return region
+		end
+	end
+
+	return Config.Regions[1]
+end
+
+local function chooseResourcePosition(resourceId)
+	local region = chooseRegionForResource(resourceId)
+	if not region then
+		return randomGroundPosition()
+	end
+
+	return randomPositionNear(region.Center, region.Radius * 0.82)
+end
+
 local function setModelVisible(model, visible)
 	for _, descendant in ipairs(model:GetDescendants()) do
 		if descendant:IsA("BasePart") then
@@ -36,6 +83,8 @@ local function setModelVisible(model, visible)
 			descendant.CanTouch = visible
 			descendant.CanQuery = visible
 		elseif descendant:IsA("ProximityPrompt") then
+			descendant.Enabled = visible
+		elseif descendant:IsA("Light") then
 			descendant.Enabled = visible
 		end
 	end
@@ -54,6 +103,28 @@ local function createPrompt(parent, resourceId, resourceConfig)
 	prompt.Triggered:Connect(function(player)
 		ResourceService.harvest(player, parent.Parent, resourceId)
 	end)
+end
+
+local function rollLoot(lootTable)
+	local totalWeight = 0
+
+	for _, entry in ipairs(lootTable) do
+		totalWeight += entry.Weight or 1
+	end
+
+	local roll = random:NextNumber(0, totalWeight)
+	local running = 0
+
+	for _, entry in ipairs(lootTable) do
+		running += entry.Weight or 1
+
+		if roll <= running then
+			return entry.Item, random:NextInteger(entry.Min, entry.Max)
+		end
+	end
+
+	local fallback = lootTable[#lootTable]
+	return fallback.Item, random:NextInteger(fallback.Min, fallback.Max)
 end
 
 local function createTree(position)
@@ -216,8 +287,79 @@ local function createIronDeposit(position)
 	model.Parent = resourcesFolder
 end
 
-local function spawnResource(resourceId)
-	local position = randomGroundPosition()
+local function createHerbPatch(position)
+	local model = Instance.new("Model")
+	model.Name = "HerbPatch"
+
+	local base = Instance.new("Part")
+	base.Name = "Herbs"
+	base.Anchored = true
+	base.Shape = Enum.PartType.Ball
+	base.Size = Vector3.new(4.5, 1.6, 4.5)
+	base.CFrame = CFrame.new(position + Vector3.new(0, 0.9, 0))
+	base.Color = RESOURCE_COLORS.HerbPatch
+	base.Material = Enum.Material.Grass
+	base.Parent = model
+
+	for index = 1, 5 do
+		local flower = Instance.new("Part")
+		flower.Name = "MedicinalBloom"
+		flower.Anchored = true
+		flower.CanCollide = false
+		flower.Shape = Enum.PartType.Ball
+		flower.Size = Vector3.new(0.45, 0.45, 0.45)
+		flower.CFrame = base.CFrame * CFrame.new(
+			random:NextNumber(-1.6, 1.6),
+			0.75,
+			random:NextNumber(-1.6, 1.6)
+		)
+		flower.Color = index % 2 == 0 and Color3.fromRGB(218, 116, 188) or Color3.fromRGB(245, 218, 118)
+		flower.Material = Enum.Material.Neon
+		flower.Parent = model
+	end
+
+	model.PrimaryPart = base
+	createPrompt(base, "HerbPatch", Config.Resources.HerbPatch)
+	model.Parent = resourcesFolder
+end
+
+local function createLootCache(position)
+	local model = Instance.new("Model")
+	model.Name = "LootCache"
+
+	local crate = Instance.new("Part")
+	crate.Name = "Crate"
+	crate.Anchored = true
+	crate.Size = Vector3.new(5.5, 3.2, 4)
+	crate.CFrame = CFrame.new(position + Vector3.new(0, 1.7, 0)) * CFrame.Angles(0, random:NextNumber(0, math.pi), 0)
+	crate.Color = RESOURCE_COLORS.LootCache
+	crate.Material = Enum.Material.WoodPlanks
+	crate.Parent = model
+
+	local band = Instance.new("Part")
+	band.Name = "MetalBand"
+	band.Anchored = true
+	band.CanCollide = false
+	band.Size = Vector3.new(5.8, 0.35, 4.2)
+	band.CFrame = crate.CFrame * CFrame.new(0, 1.72, 0)
+	band.Color = Color3.fromRGB(92, 92, 88)
+	band.Material = Enum.Material.Metal
+	band.Parent = model
+
+	local glow = Instance.new("PointLight")
+	glow.Name = "CacheGlint"
+	glow.Brightness = 0.8
+	glow.Range = 12
+	glow.Color = Color3.fromRGB(255, 222, 145)
+	glow.Parent = crate
+
+	model.PrimaryPart = crate
+	createPrompt(crate, "LootCache", Config.Resources.LootCache)
+	model.Parent = resourcesFolder
+end
+
+local function spawnResource(resourceId, position)
+	position = position or chooseResourcePosition(resourceId)
 
 	if resourceId == "Tree" then
 		createTree(position)
@@ -231,6 +373,27 @@ local function spawnResource(resourceId)
 		createWaterSpring(position)
 	elseif resourceId == "IronDeposit" then
 		createIronDeposit(position)
+	elseif resourceId == "HerbPatch" then
+		createHerbPatch(position)
+	elseif resourceId == "LootCache" then
+		createLootCache(position)
+	end
+end
+
+local function spawnStarterSupplies()
+	local radius = Config.World.StarterSupplyRadius
+	local starterResources = {
+		Tree = 8,
+		Rock = 6,
+		FiberPlant = 7,
+		BerryBush = 6,
+		WaterSpring = 2,
+	}
+
+	for resourceId, count in pairs(starterResources) do
+		for _ = 1, count do
+			spawnResource(resourceId, randomPositionNear(Vector3.new(0, 0, 0), radius))
+		end
 	end
 end
 
@@ -239,8 +402,6 @@ function ResourceService.harvest(player, model, resourceId)
 	if not resourceConfig or not model or not model.Parent then
 		return
 	end
-
-	local amount = random:NextInteger(resourceConfig.MinAmount, resourceConfig.MaxAmount)
 
 	if resourceConfig.Thirst then
 		context.VitalsService.applyConsumable(player, {
@@ -267,6 +428,36 @@ function ResourceService.harvest(player, model, resourceId)
 		)
 		return
 	end
+
+	if resourceConfig.Loot then
+		local itemId, amount = rollLoot(resourceConfig.Loot)
+		inventory.addItem(player, itemId, amount)
+
+		if context.ObjectiveService then
+			context.ObjectiveService.recordCacheSearched(player)
+		end
+
+		if context.ProgressionService then
+			context.ProgressionService.addXP(player, Config.Progression.XP.CacheSearch, "cache search")
+		end
+
+		Remotes.get("Notification"):FireClient(
+			player,
+			string.format("Cache found: +%d %s", amount, Config.Items[itemId].DisplayName)
+		)
+
+		setModelVisible(model, false)
+
+		task.delay(resourceConfig.RespawnSeconds, function()
+			if model and model.Parent then
+				setModelVisible(model, true)
+			end
+		end)
+
+		return
+	end
+
+	local amount = random:NextInteger(resourceConfig.MinAmount, resourceConfig.MaxAmount)
 
 	if inventory.hasItem(player, "StoneAxe", 1) and (resourceId == "Tree" or resourceId == "FiberPlant") then
 		amount += 1
@@ -310,6 +501,8 @@ function ResourceService.init(newContext)
 	if #resourcesFolder:GetChildren() > 0 then
 		return
 	end
+
+	spawnStarterSupplies()
 
 	for resourceId, resourceConfig in pairs(Config.Resources) do
 		for _ = 1, resourceConfig.SpawnCount do

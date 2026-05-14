@@ -12,6 +12,8 @@ local enemiesFolder
 local random = Random.new(Config.World.Seed + 91)
 local activeEnemies = {}
 local lastAttackByEnemy = {}
+local threat = Config.Threat.BaseThreat
+local lastRaidAt = 0
 
 local function getRoot(player)
 	local character = player.Character
@@ -145,6 +147,37 @@ local function countActiveEnemies()
 	return count
 end
 
+local function getOwnerPlayer(model)
+	local ownerUserId = model:GetAttribute("OwnerUserId")
+	if not ownerUserId then
+		return nil
+	end
+
+	return Players:GetPlayerByUserId(ownerUserId)
+end
+
+local function getHighestBeaconStage()
+	local structuresFolder = context and context.WorldService and context.WorldService.getStructuresFolder()
+	local highestStage = 0
+
+	if not structuresFolder then
+		return highestStage
+	end
+
+	for _, structure in ipairs(structuresFolder:GetChildren()) do
+		if structure.Name == "SignalBeacon" then
+			highestStage = math.max(highestStage, structure:GetAttribute("Stage") or 0)
+		end
+	end
+
+	return highestStage
+end
+
+local function getEffectiveThreat()
+	local beaconBonus = getHighestBeaconStage() * Config.Threat.BeaconThreatPerStage
+	return math.clamp(threat + beaconBonus, Config.Threat.BaseThreat, Config.Threat.MaxThreat)
+end
+
 local function getDamageForPlayer(player, baseDamage)
 	local damage = baseDamage
 	local armorId = context.InventoryService and context.InventoryService.getEquippedItem(player, "Armor") or nil
@@ -154,6 +187,46 @@ local function getDamageForPlayer(player, baseDamage)
 	end
 
 	return damage
+end
+
+local function triggerSpikeTraps(enemy, position)
+	local structuresFolder = context and context.WorldService and context.WorldService.getStructuresFolder()
+	if not structuresFolder then
+		return
+	end
+
+	for _, structure in ipairs(structuresFolder:GetChildren()) do
+		if structure.Name == "SpikeTrap" and structure.PrimaryPart then
+			local charges = structure:GetAttribute("Charges") or 0
+			local lastTriggered = structure:GetAttribute("LastTriggered") or 0
+			local distance = (structure:GetPivot().Position - position).Magnitude
+
+			if charges > 0
+				and os.clock() - lastTriggered >= 1
+				and distance <= Config.Buildables.SpikeTrapKit.Radius
+			then
+				structure:SetAttribute("LastTriggered", os.clock())
+				structure:SetAttribute("Charges", charges - 1)
+
+				local owner = getOwnerPlayer(structure)
+				EnemyService.damageEnemy(owner, enemy, Config.Buildables.SpikeTrapKit.Damage)
+
+				if owner then
+					if context.ProgressionService then
+						context.ProgressionService.addXP(owner, Config.Progression.XP.TrapTriggered, "trap triggered")
+					end
+
+					Remotes.get("Notification"):FireClient(owner, "Spike trap triggered.")
+				end
+
+				if charges - 1 <= 0 then
+					structure:Destroy()
+				end
+
+				return
+			end
+		end
+	end
 end
 
 local function moveEnemy(enemy, deltaTime)
@@ -190,6 +263,11 @@ local function moveEnemy(enemy, deltaTime)
 		local step = math.min(enemyConfig.MoveSpeed * deltaTime, direction.Magnitude)
 		local nextPosition = Vector3.new(position.X, 2, position.Z) + direction.Unit * step
 		enemy:PivotTo(CFrame.new(nextPosition, targetPosition))
+		triggerSpikeTraps(enemy, nextPosition)
+	end
+
+	if not enemy.Parent then
+		return
 	end
 
 	if distance <= enemyConfig.AttackRange then
@@ -215,6 +293,10 @@ local function moveEnemy(enemy, deltaTime)
 end
 
 local function grantDrops(player, enemyConfig)
+	if not player then
+		return
+	end
+
 	for itemId, drop in pairs(enemyConfig.Drop) do
 		local amount = random:NextInteger(drop.Min, drop.Max)
 		context.InventoryService.addItem(player, itemId, amount)
@@ -223,6 +305,20 @@ local function grantDrops(player, enemyConfig)
 			string.format("+%d %s", amount, Config.Items[itemId].DisplayName)
 		)
 	end
+end
+
+local function spawnRaid()
+	local players = Players:GetPlayers()
+	if #players == 0 then
+		return
+	end
+
+	for _ = 1, Config.Threat.RaidEnemyCount do
+		local target = players[random:NextInteger(1, #players)]
+		createNightStalker(randomSpawnPositionAround(target))
+	end
+
+	Remotes.get("Notification"):FireAllClients("A raid is closing in on the camp.")
 end
 
 function EnemyService.getEnemies()
@@ -235,6 +331,10 @@ function EnemyService.getEnemies()
 	end
 
 	return enemies
+end
+
+function EnemyService.getThreat()
+	return math.floor(getEffectiveThreat() + 0.5)
 end
 
 function EnemyService.damageEnemy(player, enemy, amount)
@@ -250,14 +350,17 @@ function EnemyService.damageEnemy(player, enemy, amount)
 		activeEnemies[enemy] = nil
 		lastAttackByEnemy[enemy] = nil
 		enemy:Destroy()
-		grantDrops(player, Config.Enemies.NightStalker)
 
-		if context.ObjectiveService then
-			context.ObjectiveService.recordEnemyDefeated(player)
-		end
+		if player then
+			grantDrops(player, Config.Enemies.NightStalker)
 
-		if context.ProgressionService then
-			context.ProgressionService.addXP(player, Config.Progression.XP.EnemyDefeat, "enemy defeated")
+			if context.ObjectiveService then
+				context.ObjectiveService.recordEnemyDefeated(player)
+			end
+
+			if context.ProgressionService then
+				context.ProgressionService.addXP(player, Config.Progression.XP.EnemyDefeat, "enemy defeated")
+			end
 		end
 
 		return true, "Defeated Night Stalker."
@@ -294,6 +397,37 @@ function EnemyService.init(newContext)
 						Remotes.get("Notification"):FireAllClients("A night stalker is hunting nearby.")
 					end
 				end
+			end
+		end
+	end)
+
+	task.spawn(function()
+		while true do
+			task.wait(10)
+
+			if context.WorldService.isNight() then
+				local weatherId = context.WorldService.getCurrentWeatherId()
+				threat = math.min(Config.Threat.MaxThreat, threat + Config.Threat.NightThreatPerTick)
+
+				if weatherId == "Storm" then
+					threat = math.min(Config.Threat.MaxThreat, threat + Config.Threat.StormThreatBonus)
+				elseif weatherId == "HeatWave" then
+					threat = math.min(Config.Threat.MaxThreat, threat + Config.Threat.HeatWaveThreatBonus)
+				end
+			else
+				threat = math.max(Config.Threat.BaseThreat, threat - Config.Threat.DayThreatDecay)
+			end
+
+			if getEffectiveThreat() >= Config.Threat.RaidThreshold
+				and os.clock() - lastRaidAt >= Config.Threat.RaidCooldownSeconds
+			then
+				lastRaidAt = os.clock()
+				spawnRaid()
+				threat = math.max(Config.Threat.BaseThreat, threat - (Config.Threat.RaidThreshold * 0.55))
+			end
+
+			if context.WorldService then
+				context.WorldService.broadcastWorldState()
 			end
 		end
 	end)

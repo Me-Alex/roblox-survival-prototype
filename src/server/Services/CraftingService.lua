@@ -204,6 +204,132 @@ local function createForge(cframe)
 	return model
 end
 
+local function createSpikeTrap(cframe)
+	local model = Instance.new("Model")
+	model.Name = "SpikeTrap"
+	model:SetAttribute("Charges", Config.Buildables.SpikeTrapKit.Charges)
+	model:SetAttribute("LastTriggered", 0)
+
+	local base = Instance.new("Part")
+	base.Name = "TrapBase"
+	base.Anchored = true
+	base.Size = Vector3.new(8, 0.4, 8)
+	base.CFrame = cframe * CFrame.new(0, 0.1, 0)
+	base.Color = Color3.fromRGB(76, 58, 42)
+	base.Material = Enum.Material.WoodPlanks
+	base.Parent = model
+
+	for x = -1, 1 do
+		for z = -1, 1 do
+			local spike = Instance.new("WedgePart")
+			spike.Name = "Spike"
+			spike.Anchored = true
+			spike.CanCollide = false
+			spike.Size = Vector3.new(1.1, 2.6, 1.1)
+			spike.CFrame = cframe
+				* CFrame.new(x * 2, 1.25, z * 2)
+				* CFrame.Angles(0, (x + z) * math.rad(18), 0)
+			spike.Color = Color3.fromRGB(92, 72, 48)
+			spike.Material = Enum.Material.Wood
+			spike.Parent = model
+		end
+	end
+
+	model.PrimaryPart = base
+	return model
+end
+
+local function setBeaconStage(model, stage)
+	model:SetAttribute("Stage", stage)
+
+	local stageName = Config.SignalBeacon.StageNames[stage] or "Unknown"
+	local signal = model:FindFirstChild("SignalLight", true)
+	local prompt = model:FindFirstChild("UpgradePrompt", true)
+
+	if signal then
+		signal.Transparency = stage > 0 and 0 or 0.45
+		signal.Color = stage >= Config.SignalBeacon.MaxStage and Color3.fromRGB(92, 223, 255)
+			or Color3.fromRGB(255, 202, 96)
+
+		local light = signal:FindFirstChild("BeaconLight")
+		if light then
+			light.Enabled = stage > 0
+			light.Brightness = stage >= Config.SignalBeacon.MaxStage and 3.5 or 1.7
+			light.Range = stage >= Config.SignalBeacon.MaxStage and 42 or 24
+		end
+	end
+
+	if prompt then
+		prompt.ActionText = stage >= Config.SignalBeacon.MaxStage and "Online" or "Upgrade"
+		prompt.ObjectText = string.format("Signal Beacon - %s", stageName)
+		prompt.Enabled = stage < Config.SignalBeacon.MaxStage
+	end
+end
+
+local function createSignalBeacon(cframe)
+	local model = Instance.new("Model")
+	model.Name = "SignalBeacon"
+
+	local base = Instance.new("Part")
+	base.Name = "BeaconBase"
+	base.Anchored = true
+	base.Size = Vector3.new(7, 1, 7)
+	base.CFrame = cframe * CFrame.new(0, 0.5, 0)
+	base.Color = Color3.fromRGB(70, 72, 74)
+	base.Material = Enum.Material.Metal
+	base.Parent = model
+
+	local mast = Instance.new("Part")
+	mast.Name = "Mast"
+	mast.Anchored = true
+	mast.Size = Vector3.new(0.8, 8, 0.8)
+	mast.CFrame = cframe * CFrame.new(0, 4.5, 0)
+	mast.Color = Color3.fromRGB(108, 110, 112)
+	mast.Material = Enum.Material.Metal
+	mast.Parent = model
+
+	local dish = Instance.new("Part")
+	dish.Name = "Dish"
+	dish.Anchored = true
+	dish.Shape = Enum.PartType.Ball
+	dish.Size = Vector3.new(4.4, 1, 4.4)
+	dish.CFrame = cframe * CFrame.new(0, 8.6, 0)
+	dish.Color = Color3.fromRGB(130, 138, 139)
+	dish.Material = Enum.Material.Metal
+	dish.Parent = model
+
+	local signal = Instance.new("Part")
+	signal.Name = "SignalLight"
+	signal.Anchored = true
+	signal.CanCollide = false
+	signal.Shape = Enum.PartType.Ball
+	signal.Size = Vector3.new(1.2, 1.2, 1.2)
+	signal.CFrame = cframe * CFrame.new(0, 9.4, 0)
+	signal.Material = Enum.Material.Neon
+	signal.Parent = model
+
+	local light = Instance.new("PointLight")
+	light.Name = "BeaconLight"
+	light.Color = Color3.fromRGB(92, 223, 255)
+	light.Enabled = false
+	light.Parent = signal
+
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = "UpgradePrompt"
+	prompt.HoldDuration = 0.7
+	prompt.MaxActivationDistance = 12
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = base
+
+	prompt.Triggered:Connect(function(player)
+		CraftingService.upgradeBeacon(player, model)
+	end)
+
+	model.PrimaryPart = base
+	setBeaconStage(model, 0)
+	return model
+end
+
 local function getStructureRadius(modelName)
 	for _, buildable in pairs(Config.Buildables) do
 		if buildable.ModelName == modelName then
@@ -218,6 +344,51 @@ local function missingItemMessage(itemId)
 	local itemConfig = Config.Items[itemId]
 	local displayName = itemConfig and itemConfig.DisplayName or itemId
 	return string.format("Need more %s.", displayName)
+end
+
+function CraftingService.upgradeBeacon(player, model)
+	if not model or model.Name ~= "SignalBeacon" or not model.Parent then
+		return false, "No signal beacon nearby."
+	end
+
+	local currentStage = model:GetAttribute("Stage") or 0
+	local nextStage = currentStage + 1
+
+	if nextStage > Config.SignalBeacon.MaxStage then
+		notify(player, "The signal beacon is already online.")
+		return false, "Already online."
+	end
+
+	local cost = Config.SignalBeacon.UpgradeCost[nextStage]
+	local ok, missingItemId = context.InventoryService.hasItems(player, cost)
+
+	if not ok then
+		local message = missingItemMessage(missingItemId)
+		notify(player, message)
+		return false, message
+	end
+
+	context.InventoryService.removeItems(player, cost)
+	setBeaconStage(model, nextStage)
+
+	if context.ObjectiveService then
+		context.ObjectiveService.recordBeaconStage(player, nextStage)
+	end
+
+	if context.ProgressionService then
+		context.ProgressionService.addXP(player, Config.Progression.XP.BeaconUpgrade, "signal beacon")
+	end
+
+	local stageName = Config.SignalBeacon.StageNames[nextStage] or tostring(nextStage)
+	local message = string.format("Signal beacon upgraded: %s.", stageName)
+
+	if nextStage >= Config.SignalBeacon.MaxStage then
+		Remotes.get("Notification"):FireAllClients("The rescue signal is online. Expect heavy resistance.")
+	else
+		notify(player, message)
+	end
+
+	return true, message
 end
 
 function CraftingService.craft(player, recipeId)
@@ -293,10 +464,18 @@ function CraftingService.build(player, itemId)
 		model = createWorkbench(cframe)
 	elseif itemId == "ForgeKit" then
 		model = createForge(cframe)
+	elseif itemId == "SpikeTrapKit" then
+		model = createSpikeTrap(cframe)
+	elseif itemId == "SignalBeaconKit" then
+		model = createSignalBeacon(cframe)
 	end
 
 	if not model then
 		return false, "Nothing was built."
+	end
+
+	if model.Name == "SpikeTrap" or model.Name == "SignalBeacon" then
+		model:SetAttribute("OwnerUserId", player.UserId)
 	end
 
 	context.InventoryService.removeItems(player, { [itemId] = 1 })

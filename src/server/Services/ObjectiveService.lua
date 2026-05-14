@@ -29,8 +29,11 @@ local function ensureProgress(player)
 			Crafted = {},
 			Built = {},
 			Counters = {
+				BeaconStage = 0,
+				CachesSearched = 0,
 				EnemiesDefeated = 0,
 				NightsSurvived = 0,
+				RegionsDiscovered = 0,
 			},
 			Completed = {},
 		}
@@ -181,13 +184,31 @@ end
 
 function ObjectiveService.recordEnemyDefeated(player)
 	local progress = ensureProgress(player)
-	progress.Counters.EnemiesDefeated += 1
+	progress.Counters.EnemiesDefeated = (progress.Counters.EnemiesDefeated or 0) + 1
+	evaluate(player)
+end
+
+function ObjectiveService.recordCacheSearched(player)
+	local progress = ensureProgress(player)
+	progress.Counters.CachesSearched = (progress.Counters.CachesSearched or 0) + 1
+	evaluate(player)
+end
+
+function ObjectiveService.recordRegionDiscovered(player)
+	local progress = ensureProgress(player)
+	progress.Counters.RegionsDiscovered = (progress.Counters.RegionsDiscovered or 0) + 1
+	evaluate(player)
+end
+
+function ObjectiveService.recordBeaconStage(player, stage)
+	local progress = ensureProgress(player)
+	progress.Counters.BeaconStage = math.max(progress.Counters.BeaconStage or 0, stage)
 	evaluate(player)
 end
 
 function ObjectiveService.recordNightSurvived(player)
 	local progress = ensureProgress(player)
-	progress.Counters.NightsSurvived += 1
+	progress.Counters.NightsSurvived = (progress.Counters.NightsSurvived or 0) + 1
 	evaluate(player)
 end
 

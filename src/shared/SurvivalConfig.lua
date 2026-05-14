@@ -2,12 +2,65 @@ local SurvivalConfig = {}
 
 SurvivalConfig.World = {
 	Seed = 1349,
-	SpawnAreaHalfSize = 145,
+	SpawnAreaHalfSize = 340,
 	RespawnHeight = 8,
 	DayLengthSeconds = 480,
 	NightStart = 18.5,
 	NightEnd = 6,
 	WeatherIntervalSeconds = 80,
+	RegionDiscoveryRadius = 72,
+	StarterSupplyRadius = 42,
+}
+
+SurvivalConfig.Regions = {
+	{
+		Id = "BaseMeadow",
+		DisplayName = "Base Meadow",
+		Center = Vector3.new(0, 0, 0),
+		Radius = 95,
+		Color = Color3.fromRGB(83, 124, 79),
+		Resources = { Tree = 1.1, Rock = 0.8, FiberPlant = 1.4, BerryBush = 1.5, WaterSpring = 0.7 },
+	},
+	{
+		Id = "PineRidge",
+		DisplayName = "Pine Ridge",
+		Center = Vector3.new(-220, 0, -140),
+		Radius = 118,
+		Color = Color3.fromRGB(48, 102, 66),
+		Resources = { Tree = 2.2, FiberPlant = 1.1, BerryBush = 0.8, HerbPatch = 0.7, Rock = 0.5 },
+	},
+	{
+		Id = "Stonebreak",
+		DisplayName = "Stonebreak Cliffs",
+		Center = Vector3.new(225, 0, -125),
+		Radius = 125,
+		Color = Color3.fromRGB(91, 101, 94),
+		Resources = { Rock = 2.3, IronDeposit = 1.3, LootCache = 0.6, HerbPatch = 0.5, Tree = 0.35 },
+	},
+	{
+		Id = "Mirefen",
+		DisplayName = "Mirefen Wetlands",
+		Center = Vector3.new(-185, 0, 185),
+		Radius = 120,
+		Color = Color3.fromRGB(63, 111, 94),
+		Resources = { WaterSpring = 2, FiberPlant = 1.7, HerbPatch = 1.4, BerryBush = 0.9, Tree = 0.65 },
+	},
+	{
+		Id = "OldCamp",
+		DisplayName = "Old Ranger Camp",
+		Center = Vector3.new(175, 0, 190),
+		Radius = 108,
+		Color = Color3.fromRGB(113, 100, 73),
+		Resources = { LootCache = 1.8, BerryBush = 1.1, Rock = 0.9, Tree = 0.8, FiberPlant = 0.5 },
+	},
+	{
+		Id = "IronHighlands",
+		DisplayName = "Iron Highlands",
+		Center = Vector3.new(35, 0, 285),
+		Radius = 110,
+		Color = Color3.fromRGB(104, 92, 86),
+		Resources = { IronDeposit = 2.1, Rock = 1.7, LootCache = 0.8, HerbPatch = 0.6, Tree = 0.35 },
+	},
 }
 
 SurvivalConfig.Vitals = {
@@ -33,6 +86,8 @@ SurvivalConfig.Items = {
 	Hide = { DisplayName = "Hide", Category = "Resource" },
 	IronOre = { DisplayName = "Iron Ore", Category = "Resource" },
 	IronIngot = { DisplayName = "Iron Ingot", Category = "Resource" },
+	AncientScrap = { DisplayName = "Ancient Scrap", Category = "Resource" },
+	MedicinalHerb = { DisplayName = "Medicinal Herb", Category = "Resource" },
 	RawMeat = { DisplayName = "Raw Meat", Category = "Food" },
 	Berries = { DisplayName = "Berries", Category = "Food" },
 	CookedBerries = { DisplayName = "Cooked Berries", Category = "Food" },
@@ -50,6 +105,8 @@ SurvivalConfig.Items = {
 	RainCollectorKit = { DisplayName = "Rain Collector Kit", Category = "Buildable" },
 	WorkbenchKit = { DisplayName = "Workbench Kit", Category = "Buildable" },
 	ForgeKit = { DisplayName = "Forge Kit", Category = "Buildable" },
+	SpikeTrapKit = { DisplayName = "Spike Trap Kit", Category = "Buildable" },
+	SignalBeaconKit = { DisplayName = "Signal Beacon Kit", Category = "Buildable" },
 }
 
 SurvivalConfig.Resources = {
@@ -58,7 +115,7 @@ SurvivalConfig.Resources = {
 		Reward = "Wood",
 		MinAmount = 2,
 		MaxAmount = 5,
-		SpawnCount = 28,
+		SpawnCount = 54,
 		RespawnSeconds = 55,
 		HarvestText = "Chop",
 	},
@@ -67,7 +124,7 @@ SurvivalConfig.Resources = {
 		Reward = "Stone",
 		MinAmount = 1,
 		MaxAmount = 4,
-		SpawnCount = 22,
+		SpawnCount = 44,
 		RespawnSeconds = 65,
 		HarvestText = "Mine",
 	},
@@ -76,7 +133,7 @@ SurvivalConfig.Resources = {
 		Reward = "Fiber",
 		MinAmount = 2,
 		MaxAmount = 4,
-		SpawnCount = 20,
+		SpawnCount = 40,
 		RespawnSeconds = 45,
 		HarvestText = "Gather",
 	},
@@ -85,7 +142,7 @@ SurvivalConfig.Resources = {
 		Reward = "Berries",
 		MinAmount = 2,
 		MaxAmount = 5,
-		SpawnCount = 18,
+		SpawnCount = 36,
 		RespawnSeconds = 50,
 		HarvestText = "Pick",
 	},
@@ -94,7 +151,7 @@ SurvivalConfig.Resources = {
 		Thirst = 38,
 		MinAmount = 1,
 		MaxAmount = 1,
-		SpawnCount = 6,
+		SpawnCount = 12,
 		RespawnSeconds = 14,
 		HarvestText = "Drink",
 	},
@@ -103,10 +160,32 @@ SurvivalConfig.Resources = {
 		Reward = "IronOre",
 		MinAmount = 1,
 		MaxAmount = 3,
-		SpawnCount = 10,
+		SpawnCount = 20,
 		RespawnSeconds = 95,
 		HarvestText = "Mine",
 		RequiredTool = "StoneAxe",
+	},
+	HerbPatch = {
+		DisplayName = "Medicinal Herb",
+		Reward = "MedicinalHerb",
+		MinAmount = 1,
+		MaxAmount = 2,
+		SpawnCount = 28,
+		RespawnSeconds = 60,
+		HarvestText = "Gather",
+	},
+	LootCache = {
+		DisplayName = "Abandoned Cache",
+		SpawnCount = 16,
+		RespawnSeconds = 120,
+		HarvestText = "Search",
+		Loot = {
+			{ Item = "AncientScrap", Min = 1, Max = 2, Weight = 36 },
+			{ Item = "IronOre", Min = 1, Max = 2, Weight = 24 },
+			{ Item = "Bandage", Min = 1, Max = 1, Weight = 18 },
+			{ Item = "CookedBerries", Min = 1, Max = 2, Weight = 12 },
+			{ Item = "SurvivalTonic", Min = 1, Max = 1, Weight = 10 },
+		},
 	},
 }
 
@@ -140,6 +219,24 @@ SurvivalConfig.Crafting = {
 		RequiresNearby = "Workbench",
 		RequiredLevel = 2,
 		Description = "Smelts ore into ingots.",
+	},
+	SpikeTrapKit = {
+		DisplayName = "Spike Trap Kit",
+		Cost = { Wood = 5, Stone = 4, Fiber = 2 },
+		Result = "SpikeTrapKit",
+		Amount = 1,
+		RequiresNearby = "Workbench",
+		RequiredLevel = 2,
+		Description = "Place to damage night stalkers that cross it.",
+	},
+	SignalBeaconKit = {
+		DisplayName = "Signal Beacon Kit",
+		Cost = { IronIngot = 4, AncientScrap = 3, Fiber = 4 },
+		Result = "SignalBeaconKit",
+		Amount = 1,
+		RequiresNearby = "Workbench",
+		RequiredLevel = 4,
+		Description = "Place and upgrade to survive the final raid.",
 	},
 	IronIngot = {
 		DisplayName = "Iron Ingot",
@@ -221,7 +318,7 @@ SurvivalConfig.Crafting = {
 	},
 	Antidote = {
 		DisplayName = "Antidote",
-		Cost = { Berries = 3, Fiber = 2 },
+		Cost = { MedicinalHerb = 2, Berries = 2 },
 		Result = "Antidote",
 		Amount = 1,
 		RequiresNearby = "Campfire",
@@ -229,7 +326,7 @@ SurvivalConfig.Crafting = {
 	},
 	SurvivalTonic = {
 		DisplayName = "Survival Tonic",
-		Cost = { Berries = 2, Fiber = 2 },
+		Cost = { MedicinalHerb = 2, Berries = 2, Fiber = 1 },
 		Result = "SurvivalTonic",
 		Amount = 1,
 		Description = "Restores thirst, hunger, and a little health.",
@@ -309,6 +406,20 @@ SurvivalConfig.Buildables = {
 		Radius = 18,
 		LifetimeSeconds = 0,
 	},
+	SpikeTrapKit = {
+		ModelName = "SpikeTrap",
+		DisplayName = "Spike Trap",
+		Radius = 9,
+		LifetimeSeconds = 0,
+		Damage = 45,
+		Charges = 4,
+	},
+	SignalBeaconKit = {
+		ModelName = "SignalBeacon",
+		DisplayName = "Signal Beacon",
+		Radius = 20,
+		LifetimeSeconds = 0,
+	},
 }
 
 SurvivalConfig.Equipment = {
@@ -324,12 +435,53 @@ SurvivalConfig.Progression = {
 	XP = {
 		Harvest = 4,
 		RareHarvest = 8,
+		CacheSearch = 16,
 		Craft = 12,
 		Build = 18,
 		EnemyHit = 4,
 		EnemyDefeat = 38,
 		NightSurvived = 52,
 		StatusCured = 10,
+		TrapTriggered = 14,
+		BeaconUpgrade = 70,
+		RegionDiscovered = 20,
+	},
+}
+
+SurvivalConfig.Movement = {
+	WalkSpeed = 16,
+	SprintSpeed = 23,
+	StaminaMax = 100,
+	SprintDrainPerSecond = 16,
+	StaminaRegenPerSecond = 12,
+	ExhaustedThreshold = 10,
+}
+
+SurvivalConfig.Threat = {
+	BaseThreat = 0,
+	MaxThreat = 100,
+	NightThreatPerTick = 4,
+	StormThreatBonus = 2,
+	HeatWaveThreatBonus = 1,
+	DayThreatDecay = 1.5,
+	RaidThreshold = 70,
+	RaidCooldownSeconds = 55,
+	RaidEnemyCount = 3,
+	BeaconThreatPerStage = 12,
+}
+
+SurvivalConfig.SignalBeacon = {
+	MaxStage = 3,
+	UpgradeCost = {
+		[1] = { AncientScrap = 2, IronIngot = 1 },
+		[2] = { AncientScrap = 3, IronIngot = 2, Hide = 2 },
+		[3] = { AncientScrap = 4, IronIngot = 3, SurvivalTonic = 1 },
+	},
+	StageNames = {
+		[0] = "Dormant",
+		[1] = "Frame Built",
+		[2] = "Transmitter Tuned",
+		[3] = "Signal Online",
 	},
 }
 
@@ -432,6 +584,14 @@ SurvivalConfig.Objectives = {
 		Requirements = { Wood = 4, Stone = 3, Fiber = 3, Berries = 2 },
 		Reward = { Bandage = 1 },
 	},
+	ExploreRegions = {
+		DisplayName = "Scout The Island",
+		Description = "Discover four named regions.",
+		Kind = "Counter",
+		Counter = "RegionsDiscovered",
+		Required = 4,
+		Reward = { CookedBerries = 2, MedicinalHerb = 2 },
+	},
 	MakeWeapons = {
 		DisplayName = "Armed For Night",
 		Description = "Craft a stone axe and a spear.",
@@ -446,12 +606,35 @@ SurvivalConfig.Objectives = {
 		Requirements = { Campfire = 1, Shelter = 1, Workbench = 1 },
 		Reward = { SurvivalTonic = 1 },
 	},
+	SearchCaches = {
+		DisplayName = "Scavenge The Old World",
+		Description = "Search three abandoned caches.",
+		Kind = "Counter",
+		Counter = "CachesSearched",
+		Required = 3,
+		Reward = { AncientScrap = 2, MedicinalHerb = 2 },
+	},
+	BuildDefenses = {
+		DisplayName = "Defensive Line",
+		Description = "Place two spike traps.",
+		Kind = "Build",
+		Requirements = { SpikeTrap = 2 },
+		Reward = { IronOre = 3 },
+	},
 	ForgeIron = {
 		DisplayName = "Iron Age",
 		Description = "Place a forge and craft an iron spear.",
 		Kind = "Craft",
 		Requirements = { ForgeKit = 1, IronSpear = 1 },
 		Reward = { Antidote = 2 },
+	},
+	SignalForRescue = {
+		DisplayName = "Signal For Rescue",
+		Description = "Upgrade the signal beacon to stage three.",
+		Kind = "Counter",
+		Counter = "BeaconStage",
+		Required = 3,
+		Reward = { IronArmor = 1 },
 	},
 	HuntStalkers = {
 		DisplayName = "Night Hunter",

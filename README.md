@@ -4,25 +4,29 @@ A Rojo-compatible Roblox survival game prototype with resource gathering, hunger
 
 ## What Is Built
 
-- Runtime world setup with a grass island, spawn point, resource nodes, and day/night cycle.
-- Harvestable trees, rocks, fiber plants, and berry bushes using `ProximityPrompt`.
+- Runtime world setup with a larger island, named regions, landmarks, trail routes, resource nodes, and day/night cycle.
+- Open-world regions including Base Meadow, Pine Ridge, Stonebreak Cliffs, Mirefen Wetlands, Old Ranger Camp, and Iron Highlands.
+- Harvestable trees, rocks, fiber plants, berry bushes, herb patches, and abandoned caches using `ProximityPrompt`.
+- Biome-weighted resource clusters that push players to scout forests, wetlands, cliff zones, camps, and iron-rich highlands.
 - Server-owned inventory with client synchronization.
 - Hunger, thirst, and temperature drain over time.
 - Damage from starvation, dehydration, and severe temperature exposure.
 - Dynamic weather that changes survival pressure through rain, storms, cold fronts, and heat waves.
+- Sprint stamina for faster exploration with an exhaustion tradeoff.
 - Drinkable water springs and placeable rain collectors.
 - Night stalkers that spawn after dark, chase players, attack, and drop hide/raw meat.
+- Night threat that escalates into raids, especially around upgraded signal beacons.
 - Server-validated attack action with fists, stone axe, and spear damage tiers.
 - Explicit equipment for weapons and armor, with durability loss and breakage.
 - Bleeding and poison status effects with medical cures.
 - XP and level progression from harvesting, crafting, building, combat, and surviving nights.
-- Objective progression with rewards for gathering, crafting, building, hunting, and surviving the night.
+- Objective progression with rewards for exploring, gathering, crafting, building, hunting, and surviving the night.
 - Crafting for tools, food, bandages, campfires, and shelter kits.
-- Expanded crafting for spear, hide armor, cooked meat, antidote, survival tonic, rain collectors, workbench, forge, and iron-tier gear.
+- Expanded crafting for spear, hide armor, cooked meat, antidote, survival tonic, rain collectors, workbench, forge, spike traps, signal beacons, and iron-tier gear.
 - Iron deposits, smelting, and station-gated recipes.
 - Placeable campfires and shelters that affect night-time survival.
 - Client HUD for vitals, inventory, consumables, buildables, crafting, and notifications.
-- World HUD for day/time/weather, objective tracker, and an attack button.
+- World HUD for day/time/region/weather/threat, objective tracker, and attack/sprint buttons.
 
 ## Project Layout
 
@@ -64,6 +68,7 @@ This repository is designed to live on GitHub as source code. Clone it on anothe
 ## First Playtest Goals
 
 - Gather wood, stone, fiber, and berries.
+- Follow trails to discover named regions and complete `Scout The Island`.
 - Craft a `Stone Axe`, then compare wood/fiber gathering speed.
 - Craft a `Spear` before nightfall.
 - Equip crafted weapons and armor from the `GEAR` panel.
@@ -76,3 +81,7 @@ This repository is designed to live on GitHub as source code. Clone it on anothe
 - Craft `Cooked Berries` near the campfire and use them from the HUD.
 - Build a shelter and verify cold exposure is less punishing nearby.
 - Place a `Rain Collector Kit` and use it as backup drinking water.
+- Search abandoned caches for rare supplies.
+- Visit Stonebreak Cliffs or Iron Highlands when you need more ore.
+- Place `Spike Trap Kit` defenses before a raid.
+- Build and upgrade a `Signal Beacon Kit` toward rescue.

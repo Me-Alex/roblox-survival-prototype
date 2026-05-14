@@ -7,15 +7,18 @@ The player wakes up in a small wilderness area and has to survive the first nigh
 ## Core Loop
 
 1. Explore the island.
-2. Harvest resources from nearby nodes.
-3. Craft tools and survival items.
-4. Place campfires and shelters.
-5. Manage hunger, thirst, temperature, and health.
-6. Survive the night and prepare for longer trips.
+2. Discover named regions and decide where to travel next.
+3. Harvest resources from biome-specific clusters.
+4. Craft tools and survival items.
+5. Place campfires and shelters.
+6. Manage hunger, thirst, temperature, and health.
+7. Survive the night and prepare for longer trips.
 
 ## Player Verbs
 
 - Gather
+- Sprint
+- Scout landmarks
 - Craft
 - Eat
 - Heal
@@ -32,8 +35,8 @@ The player wakes up in a small wilderness area and has to survive the first nigh
 
 ## Current Prototype Systems
 
-- `WorldService`: base map, spawn, lighting, day/night, structure proximity checks.
-- `ResourceService`: runtime resource spawning and prompt-driven harvesting.
+- `WorldService`: regional map, spawn, landmarks, lighting, day/night, discovery tracking, and structure proximity checks.
+- `ResourceService`: biome-weighted resource spawning and prompt-driven harvesting.
 - `InventoryService`: server inventory state, item usage, and remote sync.
 - `CraftingService`: recipe validation, crafting, and structure placement.
 - `VitalsService`: hunger, thirst, temperature, and survival damage.
@@ -46,13 +49,21 @@ The player wakes up in a small wilderness area and has to survive the first nigh
 ## Added Gameplay Depth
 
 - Weather changes every few minutes and affects temperature, hunger drain, thirst drain, and enemy pressure.
+- The island is divided into named regions with visible landmarks and route trails.
+- Resources are clustered by region, so travel planning matters: forests favor wood, wetlands favor herbs and water, cliffs and highlands favor stone and ore, and the old camp favors caches.
+- Region discovery grants XP and feeds an exploration objective.
 - Water springs and rain collectors make thirst management more active than eating berries.
+- Sprinting helps exploration and combat escapes, but stamina creates a short-term movement tradeoff.
 - Night stalkers create a reason to prepare before dark with weapons, armor, fire, and food.
+- Threat builds through dangerous nights and signal beacon upgrades, then turns into raids.
 - Defeated enemies drop raw meat and hide, feeding the cooking and armor loops.
 - Gear must be equipped to count in combat, and equipment durability creates long-run resource pressure.
 - Bleeding and poison make medical crafting matter beyond simple health restoration.
 - Workbench and forge structures create a midgame station loop.
 - Iron ore and ingots introduce a second gear tier with level requirements.
+- Herb patches and abandoned caches make scouting more valuable between base-building pushes.
+- Spike traps give base placement a defensive purpose.
+- The signal beacon creates a longer rescue objective with staged costs and escalating danger.
 - Objectives teach the survival loop and reward useful items without requiring a separate tutorial screen.
 
 ## Next Production Steps
