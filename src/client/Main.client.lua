@@ -15,6 +15,7 @@ local Remotes = {
     CraftRequest     = RS:WaitForChild("CraftRequest"),
     DayNightUpdate   = RS:WaitForChild("DayNightUpdate"),
     Notify           = RS:WaitForChild("Notify"),
+    PlayerDied       = RS:WaitForChild("PlayerDied"),
     AttackRequest    = RS:WaitForChild("AttackRequest"),
     ProgressionUpdate= RS:WaitForChild("ProgressionUpdate"),
     ObjectiveUpdate  = RS:WaitForChild("ObjectiveUpdate"),

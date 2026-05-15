@@ -33,6 +33,34 @@ local function pushService(list, service)
     end
 end
 
+local function callServiceMethod(service, methodName, ...)
+    local method = service and service[methodName]
+    if type(method) ~= "function" then
+        return true
+    end
+
+    local okInfo, arity = pcall(function()
+        return select(1, debug.info(method, "a"))
+    end)
+
+    local ok, err
+    if okInfo and type(arity) == "number" then
+        local passedCount = select("#", ...)
+        if arity >= passedCount + 1 then
+            ok, err = pcall(method, service, ...)
+        else
+            ok, err = pcall(method, ...)
+        end
+    else
+        ok, err = pcall(method, service, ...)
+        if not ok then
+            ok, err = pcall(method, ...)
+        end
+    end
+
+    return ok, err
+end
+
 local VitalsService      = requireService("VitalsService")
 local InventoryService   = requireService("InventoryService")
 local CraftingService    = requireService("CraftingService")
@@ -91,7 +119,7 @@ pushService(startupOrder, RespawnService)
 
 for _, service in ipairs(startupOrder) do
     if service.init then
-        local ok, err = pcall(service.init, service, ctx)
+        local ok, err = callServiceMethod(service, "init", ctx)
         if not ok then
             warn("[Server init failed]", err)
         end
@@ -103,7 +131,7 @@ print("[Server] All services initialised.")
 local function onPlayerAdded(player)
     for _, service in ipairs(startupOrder) do
         if service.playerAdded then
-            local ok, err = pcall(service.playerAdded, service, player)
+            local ok, err = callServiceMethod(service, "playerAdded", player)
             if not ok then
                 warn("[PlayerAdded service error]", err)
             end
@@ -114,7 +142,7 @@ end
 local function onPlayerRemoving(player)
     for _, service in ipairs(startupOrder) do
         if service.playerRemoving then
-            local ok, err = pcall(service.playerRemoving, service, player)
+            local ok, err = callServiceMethod(service, "playerRemoving", player)
             if not ok then
                 warn("[PlayerRemoving service error]", err)
             end
@@ -144,7 +172,7 @@ pushService(tickables, CombatService)
 RunService.Heartbeat:Connect(function(dt)
     for _, svc in ipairs(tickables) do
         if svc.tick then
-            local ok, err = pcall(svc.tick, svc, dt)
+            local ok, err = callServiceMethod(svc, "tick", dt)
             if not ok then warn("[Server tick]", err) end
         end
     end

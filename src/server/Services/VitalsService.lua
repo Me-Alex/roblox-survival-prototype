@@ -170,6 +170,17 @@ function VitalsService:setStatus(player, statusName, value)
     broadcast(player)
 end
 
+function VitalsService:adjustTemperature(player, delta)
+    local v = vitals[player]
+    if not v then
+        return
+    end
+
+    local maxTemp = (ctx and ctx.Config and ctx.Config.Vitals and ctx.Config.Vitals.MaxTemperature) or 100
+    v.temp = math.clamp(v.temp + delta, 0, maxTemp)
+    broadcast(player)
+end
+
 -- ── Tick ─────────────────────────────────────────────────────────────────
 
 function VitalsService:tick(dt)
