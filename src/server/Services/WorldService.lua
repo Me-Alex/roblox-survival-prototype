@@ -1,20 +1,11 @@
--- WorldService.lua
--- Milestone 2: volcanic island terrain, resource node spawning, campfire placement,
--- day/night cycle with proper night darkness.
---
--- HOW TERRAIN WORKS IN ROBLOX:
---   workspace.Terrain:FillBlock(cframe, size, material)
---   We carve the island out of the flat baseplate by filling blocks of terrain.
---   Materials: Enum.Material.Basalt, Slate, Sand, Mud, SmoothPlastic, Water etc.
---
--- HOW RESOURCE NODES WORK:
---   Each node is a Part (e.g. a tree trunk) tagged with a StringValue "NodeType".
---   ResourceService watches for players clicking these parts and handles drops.
---   WorldService only SPAWNS the nodes; ResourceService manages harvesting.
+-- WorldService.lua  (Milestone 6a)
+-- Changes from Milestone 2:
+--   • spawnBedroll(position) builds a visible bedroll model and attaches
+--     a ProximityPrompt tagged IsBedroll=true so SleepService can detect it.
+--   • isRaining() stub added (returns false until weather system is wired up).
 
 local Lighting   = game:GetService("Lighting")
 local Workspace  = game:GetService("Workspace")
-local RunService = game:GetService("RunService")
 
 local WorldService = {}
 local ctx
@@ -28,7 +19,7 @@ function WorldService:init(context)
     self:setupLighting()
     self:generateTerrain()
     self:spawnResourceNodes()
-    self:spawnCampfire(Vector3.new(0, 2, 20))   -- starter campfire near spawn
+    self:spawnCampfire(Vector3.new(0, 2, 20))
     print("[WorldService] World generated")
 end
 
@@ -229,21 +220,17 @@ function WorldService:spawnResourceNodes()
     local marker = Instance.new("BoolValue")
     marker.Name = "_ResourcesDone" marker.Parent = Workspace
 
-    local cfg = ctx.Config
-    local rng = Random.new(cfg.World.Seed + 1)
+    local cfg  = ctx.Config
+    local rng  = Random.new(cfg.World.Seed + 1)
     local half = cfg.World.HalfSize - 80
     local minD = cfg.Resources.MinSpacing
 
-    for i = 1, cfg.Resources.TreeCount do
+    for _ = 1, cfg.Resources.TreeCount do
         local pos = safePosition(rng, half, minD)
         if pos then
-            makeNodePart(
-                pos + Vector3.new(0, 4, 0),
+            makeNodePart(pos + Vector3.new(0, 4, 0),
                 Vector3.new(2.5, 8, 2.5),
-                Color3.fromRGB(40, 32, 28),
-                Enum.Material.Wood,
-                "Tree"
-            )
+                Color3.fromRGB(40, 32, 28), Enum.Material.Wood, "Tree")
             local crown = Instance.new("Part")
             crown.Anchored=true crown.Shape=Enum.PartType.Ball
             crown.Size=Vector3.new(7,6,7)
@@ -255,43 +242,31 @@ function WorldService:spawnResourceNodes()
         end
     end
 
-    for i = 1, cfg.Resources.RockCount do
+    for _ = 1, cfg.Resources.RockCount do
         local pos = safePosition(rng, half, minD)
         if pos then
             local sz = rng:NextNumber(2, 4)
-            makeNodePart(
-                pos + Vector3.new(0, sz/2, 0),
+            makeNodePart(pos + Vector3.new(0, sz/2, 0),
                 Vector3.new(sz*1.4, sz, sz*1.2),
-                Color3.fromRGB(56, 48, 44),
-                Enum.Material.Basalt,
-                "Rock"
-            )
+                Color3.fromRGB(56, 48, 44), Enum.Material.Basalt, "Rock")
         end
     end
 
-    for i = 1, cfg.Resources.BushCount do
+    for _ = 1, cfg.Resources.BushCount do
         local pos = safePosition(rng, half, minD)
         if pos then
-            makeNodePart(
-                pos + Vector3.new(0, 1.2, 0),
+            makeNodePart(pos + Vector3.new(0, 1.2, 0),
                 Vector3.new(3, 2.4, 3),
-                Color3.fromRGB(160, 60, 30),
-                Enum.Material.Grass,
-                "Bush"
-            )
+                Color3.fromRGB(160, 60, 30), Enum.Material.Grass, "Bush")
         end
     end
 
-    for i = 1, cfg.Resources.FiberCount do
+    for _ = 1, cfg.Resources.FiberCount do
         local pos = safePosition(rng, half, minD)
         if pos then
-            makeNodePart(
-                pos + Vector3.new(0, 0.6, 0),
+            makeNodePart(pos + Vector3.new(0, 0.6, 0),
                 Vector3.new(3.5, 1.2, 3.5),
-                Color3.fromRGB(130, 120, 90),
-                Enum.Material.LeafyGrass,
-                "Fiber"
-            )
+                Color3.fromRGB(130, 120, 90), Enum.Material.LeafyGrass, "Fiber")
         end
     end
 
@@ -302,41 +277,112 @@ end
 
 function WorldService:spawnCampfire(position)
     local cf = Instance.new("Part")
-    cf.Name     = "Campfire"
-    cf.Anchored = true
-    cf.Size     = Vector3.new(3, 1, 3)
-    cf.CFrame   = CFrame.new(position)
-    cf.Color    = Color3.fromRGB(180, 90, 20)
-    cf.Material = Enum.Material.Neon
+    cf.Name="Campfire" cf.Anchored=true
+    cf.Size=Vector3.new(3,1,3) cf.CFrame=CFrame.new(position)
+    cf.Color=Color3.fromRGB(180,90,20) cf.Material=Enum.Material.Neon
 
     local light = Instance.new("PointLight")
-    light.Brightness = 4
-    light.Range      = ctx.Config.Vitals.CampfireWarmRadius * 1.5
-    light.Color      = Color3.fromRGB(255, 160, 60)
-    light.Parent     = cf
+    light.Brightness=4 light.Range=ctx.Config.Vitals.CampfireWarmRadius*1.5
+    light.Color=Color3.fromRGB(255,160,60) light.Parent=cf
 
-    local isCampfire = Instance.new("BoolValue")
-    isCampfire.Name  = "IsCampfire"
-    isCampfire.Value = true
-    isCampfire.Parent = cf
+    Instance.new("BoolValue", cf).Name="IsCampfire"
+    local fuel=Instance.new("IntValue",cf) fuel.Name="Fuel" fuel.Value=100
 
-    local fuel = Instance.new("IntValue")
-    fuel.Name  = "Fuel"
-    fuel.Value = 100
-    fuel.Parent = cf
-
-    cf.Parent = Workspace
+    cf.Parent=Workspace
     return cf
+end
+
+-- ── Bedroll ───────────────────────────────────────────────────────────────
+-- Builds a small visible bedroll from Parts, places it at `position`, and
+-- attaches a ProximityPrompt that SleepService (Milestone 6b) will watch.
+--
+-- MODEL LAYOUT (all Parts anchored, no physics):
+--
+--   [Frame base]  – a flat dark-wood rectangle  (6 × 0.4 × 3)
+--   [Mattress]    – a slightly raised padded slab (5.4 × 0.5 × 2.6)  dark-green
+--   [Pillow]      – a small raised block at one end (1.6 × 0.4 × 1.2)  cream
+--   [ProximityPrompt] on the Frame, ActionText="Sleep"  HoldDuration=1.5
+--   [IsBedroll BoolValue]  – tag so SleepService can find it
+--   [Owner StringValue]    – stores player.UserId so only the owner can sleep
+--   [Cooldown BoolValue]   – set to true after sleeping, cleared at dawn
+
+function WorldService:spawnBedroll(position, ownerUserId)
+    local folder = Instance.new("Model")
+    folder.Name = "Bedroll"
+
+    -- Frame base
+    local frame = Instance.new("Part")
+    frame.Name     = "BedrollFrame"
+    frame.Anchored = true
+    frame.Size     = Vector3.new(6, 0.4, 3)
+    frame.CFrame   = CFrame.new(position + Vector3.new(0, 0.2, 0))
+    frame.Color    = Color3.fromRGB(80, 55, 35)
+    frame.Material = Enum.Material.Wood
+    frame.Parent   = folder
+
+    -- Mattress
+    local mattress = Instance.new("Part")
+    mattress.Name     = "Mattress"
+    mattress.Anchored = true
+    mattress.Size     = Vector3.new(5.4, 0.5, 2.6)
+    mattress.CFrame   = CFrame.new(position + Vector3.new(0, 0.65, 0))
+    mattress.Color    = Color3.fromRGB(55, 80, 55)
+    mattress.Material = Enum.Material.Fabric
+    mattress.Parent   = folder
+
+    -- Pillow (at the +Z end)
+    local pillow = Instance.new("Part")
+    pillow.Name     = "Pillow"
+    pillow.Anchored = true
+    pillow.Size     = Vector3.new(1.6, 0.4, 1.2)
+    pillow.CFrame   = CFrame.new(position + Vector3.new(0, 1.05, 1.1))
+    pillow.Color    = Color3.fromRGB(220, 200, 160)
+    pillow.Material = Enum.Material.Fabric
+    pillow.Parent   = folder
+
+    -- Tags
+    local isBedroll = Instance.new("BoolValue", frame)
+    isBedroll.Name  = "IsBedroll"
+    isBedroll.Value = true
+
+    local ownerVal = Instance.new("StringValue", frame)
+    ownerVal.Name  = "Owner"
+    ownerVal.Value = tostring(ownerUserId or "")
+
+    local cooldown = Instance.new("BoolValue", frame)
+    cooldown.Name  = "Cooldown"
+    cooldown.Value = false
+
+    -- ProximityPrompt on the frame so players standing near it get the prompt
+    local prompt = Instance.new("ProximityPrompt", frame)
+    prompt.ActionText            = "Sleep"
+    prompt.ObjectText            = "Bedroll"
+    prompt.HoldDuration          = 1.5   -- hold for 1.5s to confirm sleep
+    prompt.MaxActivationDistance = 6
+    prompt.RequiresLineOfSight   = false
+    -- SleepService wires up .Triggered in Milestone 6b
+
+    folder.PrimaryPart = frame
+    folder.Parent      = Workspace
+    return folder
 end
 
 -- ── Day / night tick ──────────────────────────────────────────────────────
 
 function WorldService:tick(dt)
-    local cfg = ctx.Config.World
-    dayTimer = dayTimer + dt
+    local cfg      = ctx.Config.World
+    local Players  = game:GetService("Players")
+    dayTimer       = dayTimer + dt
+
     if dayTimer >= cfg.DayLengthSecs then
         dayTimer = dayTimer - cfg.DayLengthSecs
-        day = day + 1
+        day      = day + 1
+        -- Clear bedroll cooldowns at dawn so players can sleep again next night
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj.Name == "Cooldown" and obj:IsA("BoolValue") then
+                obj.Value = false
+            end
+        end
     end
 
     local fraction  = dayTimer / cfg.DayLengthSecs
@@ -347,16 +393,13 @@ function WorldService:tick(dt)
     local targetBrightness = isNight and 0.4 or 1.8
     Lighting.Brightness = Lighting.Brightness + (targetBrightness - Lighting.Brightness) * dt * 0.5
 
-    -- Broadcast day/night to clients every ~2 seconds
     if math.floor(dayTimer) % 2 == 0 then
-        local Players = game:GetService("Players")
         for _, player in ipairs(Players:GetPlayers()) do
             ctx.Remotes.DayNightUpdate:FireClient(player, { day=day, isNight=isNight })
         end
     end
 
     -- Campfire warming
-    local Players = game:GetService("Players")
     for _, obj in ipairs(Workspace:GetChildren()) do
         if obj:FindFirstChild("IsCampfire") then
             local cfPos = obj.CFrame.Position
@@ -374,10 +417,19 @@ function WorldService:tick(dt)
     end
 end
 
-function WorldService:getDay()    return day end
+function WorldService:getDay()   return day end
+function WorldService:getDayTimer() return dayTimer end
 function WorldService:isNight()
     local t = Lighting.ClockTime
     return t >= ctx.Config.World.NightStartClock or t < ctx.Config.World.NightEndClock
+end
+function WorldService:isRaining() return false end  -- stub; extend in weather milestone
+function WorldService:skipToMorning()
+    -- Jump dayTimer to just past dawn (NightEndClock / 24 * DayLengthSecs)
+    local cfg   = ctx.Config.World
+    local dawn  = (cfg.NightEndClock / 24) * cfg.DayLengthSecs
+    dayTimer    = dawn + 1
+    Lighting.ClockTime = cfg.NightEndClock + 0.1
 end
 
 return WorldService

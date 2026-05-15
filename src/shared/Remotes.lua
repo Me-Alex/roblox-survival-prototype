@@ -1,36 +1,48 @@
--- Remotes.lua  (Milestone 4 — added RespawnRequest)
-local RS = game:GetService("ReplicatedStorage")
-
-local function getOrCreate(parent, name)
-    local existing = parent:FindFirstChild(name)
-    if existing then return existing end
-    local r = Instance.new("RemoteEvent")
-    r.Name   = name
-    r.Parent = parent
-    return r
-end
-
-local container = RS:FindFirstChild("SurvivalRemotes")
-if not container then
-    container      = Instance.new("Folder")
-    container.Name = "SurvivalRemotes"
-    container.Parent = RS
-end
+-- Remotes.lua  (Milestone 6a — added SleepRequest + SleepResponse)
+-- All RemoteEvents live here so every script has one place to look.
+-- Server creates them; clients WaitForChild each one.
 
 local Remotes = {}
--- Server → Client
-Remotes.VitalsUpdate     = getOrCreate(container, "VitalsUpdate")
-Remotes.InventoryUpdate  = getOrCreate(container, "InventoryUpdate")
-Remotes.Notify           = getOrCreate(container, "Notify")
-Remotes.ResourceChanged  = getOrCreate(container, "ResourceChanged")
-Remotes.DayNightUpdate   = getOrCreate(container, "DayNightUpdate")
-Remotes.ObjectiveUpdate  = getOrCreate(container, "ObjectiveUpdate")
--- Client → Server
-Remotes.CraftRequest     = getOrCreate(container, "CraftRequest")
-Remotes.UseItem          = getOrCreate(container, "UseItem")
-Remotes.DropItem         = getOrCreate(container, "DropItem")
-Remotes.PlaceStructure   = getOrCreate(container, "PlaceStructure")
-Remotes.AttackRequest    = getOrCreate(container, "AttackRequest")
-Remotes.RespawnRequest   = getOrCreate(container, "RespawnRequest")  -- NEW
+
+local REMOTE_NAMES = {
+    -- Vitals
+    "VitalsUpdate",
+    -- Inventory
+    "InventoryUpdate",
+    "UseItem",
+    -- Crafting
+    "CraftRequest",
+    -- Day / night
+    "DayNightUpdate",
+    -- Notifications (toasts)
+    "Notify",
+    -- Combat
+    "AttackRequest",
+    -- Progression
+    "ProgressionUpdate",
+    -- Objectives
+    "ObjectiveUpdate",
+    -- Death / respawn
+    "RespawnRequest",
+    -- Sleep (NEW in Milestone 6a)
+    "SleepRequest",    -- client → server: player wants to sleep at a bedroll
+    "SleepResponse",   -- server → client: { success, message }
+}
+
+function Remotes:init(parent)
+    -- Called once on the server to create all RemoteEvents under ReplicatedStorage.
+    for _, name in ipairs(REMOTE_NAMES) do
+        if not parent:FindFirstChild(name) then
+            local re = Instance.new("RemoteEvent")
+            re.Name   = name
+            re.Parent = parent
+        end
+    end
+end
+
+function Remotes:get(parent, name)
+    -- Clients call this to get a remote by name.
+    return parent:WaitForChild(name, 10)
+end
 
 return Remotes
