@@ -10,22 +10,45 @@ local Remotes = require(Shared:WaitForChild("Remotes"))
 Remotes:init(ReplicatedStorage)
 
 local Services = script.Parent:WaitForChild("Services")
-local VitalsService      = require(Services:WaitForChild("VitalsService"))
-local InventoryService   = require(Services:WaitForChild("InventoryService"))
-local CraftingService    = require(Services:WaitForChild("CraftingService"))
-local WorldService       = require(Services:WaitForChild("WorldService"))
-local ResourceService    = require(Services:WaitForChild("ResourceService"))
-local EnemyService       = require(Services:WaitForChild("EnemyService"))
-local WildlifeService    = require(Services:WaitForChild("WildlifeService"))
-local StoneOvenService   = require(Services:WaitForChild("StoneOvenService"))
-local WaterService       = require(Services:WaitForChild("WaterService"))
-local CombatService      = require(Services:WaitForChild("CombatService"))
-local ProgressionService = require(Services:WaitForChild("ProgressionService"))
-local ObjectiveService   = require(Services:WaitForChild("ObjectiveService"))
-local PersistenceService = require(Services:WaitForChild("PersistenceService"))
-local ShopService        = require(Services:WaitForChild("ShopService"))
-local SleepService       = require(Services:WaitForChild("SleepService"))
-local RespawnService     = require(Services:WaitForChild("RespawnService"))  -- NEW
+
+local function requireService(name)
+    local moduleScript = Services:FindFirstChild(name)
+    if not moduleScript then
+        warn("[Server missing service module]", name)
+        return nil
+    end
+
+    local ok, serviceOrErr = pcall(require, moduleScript)
+    if not ok then
+        warn("[Server require failed]", name, serviceOrErr)
+        return nil
+    end
+
+    return serviceOrErr
+end
+
+local function pushService(list, service)
+    if service then
+        table.insert(list, service)
+    end
+end
+
+local VitalsService      = requireService("VitalsService")
+local InventoryService   = requireService("InventoryService")
+local CraftingService    = requireService("CraftingService")
+local WorldService       = requireService("WorldService")
+local ResourceService    = requireService("ResourceService")
+local EnemyService       = requireService("EnemyService")
+local WildlifeService    = requireService("WildlifeService")
+local StoneOvenService   = requireService("StoneOvenService")
+local WaterService       = requireService("WaterService")
+local CombatService      = requireService("CombatService")
+local ProgressionService = requireService("ProgressionService")
+local ObjectiveService   = requireService("ObjectiveService")
+local PersistenceService = requireService("PersistenceService")
+local ShopService        = requireService("ShopService")
+local SleepService       = requireService("SleepService")
+local RespawnService     = requireService("RespawnService")  -- NEW
 
 local ctx = {
     Config             = Config,
@@ -48,24 +71,23 @@ local ctx = {
     RespawnService     = RespawnService,    -- NEW
 }
 
-local startupOrder = {
-    WorldService,
-    ResourceService,
-    VitalsService,
-    InventoryService,
-    StoneOvenService,
-    CraftingService,
-    WildlifeService,
-    WaterService,
-    EnemyService,
-    CombatService,
-    ProgressionService,
-    ObjectiveService,
-    PersistenceService,
-    ShopService,
-    SleepService,
-    RespawnService,
-}
+local startupOrder = {}
+pushService(startupOrder, WorldService)
+pushService(startupOrder, ResourceService)
+pushService(startupOrder, VitalsService)
+pushService(startupOrder, InventoryService)
+pushService(startupOrder, StoneOvenService)
+pushService(startupOrder, CraftingService)
+pushService(startupOrder, WildlifeService)
+pushService(startupOrder, WaterService)
+pushService(startupOrder, EnemyService)
+pushService(startupOrder, CombatService)
+pushService(startupOrder, ProgressionService)
+pushService(startupOrder, ObjectiveService)
+pushService(startupOrder, PersistenceService)
+pushService(startupOrder, ShopService)
+pushService(startupOrder, SleepService)
+pushService(startupOrder, RespawnService)
 
 for _, service in ipairs(startupOrder) do
     if service.init then
@@ -110,12 +132,14 @@ Remotes.RespawnRequest.OnServerEvent:Connect(function(player)
     player:LoadCharacter()
 end)
 
-local tickables = {
-    WorldService, ResourceService,
-    VitalsService, EnemyService,
-    WildlifeService, WaterService,
-    CombatService,
-}
+local tickables = {}
+pushService(tickables, WorldService)
+pushService(tickables, ResourceService)
+pushService(tickables, VitalsService)
+pushService(tickables, EnemyService)
+pushService(tickables, WildlifeService)
+pushService(tickables, WaterService)
+pushService(tickables, CombatService)
 
 RunService.Heartbeat:Connect(function(dt)
     for _, svc in ipairs(tickables) do
