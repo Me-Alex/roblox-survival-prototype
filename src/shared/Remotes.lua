@@ -14,6 +14,10 @@ local DEFINITIONS = {
 	ResourcePopup = "RemoteEvent",
 	HarvestAnimation = "RemoteEvent",
 	ShopOpened = "RemoteEvent",
+	-- New: fires when the player levels up, carries item reward table
+	LevelUpReward = "RemoteEvent",
+	-- New: fires to show a floating damage number on the client
+	EnemyDamaged = "RemoteEvent",
 	CraftRequest = "RemoteFunction",
 	ConsumeRequest = "RemoteFunction",
 	BuildRequest = "RemoteFunction",
