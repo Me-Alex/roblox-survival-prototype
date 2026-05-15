@@ -51,18 +51,38 @@ local categories     = { "Tools", "Weapons", "Survival", "Food" }
 local function countItem(itemId)
     local total = 0
     for _, slot in ipairs(inventory) do
-        if slot and slot.itemId == itemId then
-            total = total + (slot.amount or 0)
+        local slotItemId = slot and (slot.itemId or slot.id)
+        if slotItemId == itemId then
+            total = total + (slot.amount or slot.qty or 0)
         end
     end
     return total
 end
 
 local function canCraft(recipe)
-    for itemId, needed in pairs(recipe.requires) do
+    for itemId, needed in pairs(recipe.ingredients or {}) do
         if countItem(itemId) < needed then return false end
     end
     return true
+end
+
+local function getRecipesForCategory(category)
+    local list = {}
+    for recipeId, recipe in pairs(ctx.Config.Recipes or {}) do
+        if recipe.category == category then
+            table.insert(list, { id = recipeId, recipe = recipe })
+        end
+    end
+
+    table.sort(list, function(a, b)
+        local aItem = ctx.Config.Items[a.recipe.result]
+        local bItem = ctx.Config.Items[b.recipe.result]
+        local aName = (aItem and aItem.displayName) or a.recipe.result or a.id
+        local bName = (bItem and bItem.displayName) or b.recipe.result or b.id
+        return aName < bName
+    end)
+
+    return list
 end
 
 local function makeCorner(parent, radius)
@@ -240,8 +260,10 @@ function CraftingController:refresh()
 
     -- Build new cards
     local order = 0
-    for _, recipe in ipairs(ctx.Config.Recipes) do
-        if recipe.category ~= activeCategory then continue end
+    local recipes = getRecipesForCategory(activeCategory)
+    for _, entry in ipairs(recipes) do
+        local recipeId = entry.id
+        local recipe = entry.recipe
         order = order + 1
 
         local craftable = canCraft(recipe)
@@ -262,17 +284,25 @@ function CraftingController:refresh()
         pad.Parent        = card
 
         -- Recipe name
-        local itemCfg = ctx.Config.Items[recipe.gives.item]
+        local itemCfg = ctx.Config.Items[recipe.result]
         local nameLbl = label(card,
-            (itemCfg and itemCfg.displayName or recipe.id)
-            .. (recipe.gives.amount > 1 and "  x" .. recipe.gives.amount or ""),
+            (itemCfg and itemCfg.displayName or recipe.result or recipeId)
+            .. ((recipe.amount or 1) > 1 and "  x" .. tostring(recipe.amount) or ""),
             15, C.text, true)
         nameLbl.Position = UDim2.new(0, 0, 0, 0)
         nameLbl.Size     = UDim2.new(1, -90, 0, 20)
 
         -- Near fire warning
-        if recipe.nearFire then
-            local fireNote = label(card, "🔥 Near campfire only", 11, Color3.fromRGB(210,130,40), false)
+        local stationText
+        if recipe.nearFire and recipe.nearOven then
+            stationText = "🔥 Near campfire or stone oven"
+        elseif recipe.nearFire then
+            stationText = "🔥 Near campfire only"
+        elseif recipe.nearOven then
+            stationText = "🔥 Near stone oven only"
+        end
+        if stationText then
+            local fireNote = label(card, stationText, 11, Color3.fromRGB(210,130,40), false)
             fireNote.Position = UDim2.new(0, 0, 0, 20)
             fireNote.Size     = UDim2.new(0.7, 0, 0, 16)
         end
@@ -280,7 +310,7 @@ function CraftingController:refresh()
         -- Ingredients row
         local ingRow = Instance.new("Frame")
         ingRow.Size              = UDim2.new(1, -90, 0, 18)
-        ingRow.Position          = UDim2.new(0, 0, 0, recipe.nearFire and 38 or 24)
+        ingRow.Position          = UDim2.new(0, 0, 0, stationText and 38 or 24)
         ingRow.BackgroundTransparency = 1
         ingRow.Parent            = card
 
@@ -289,7 +319,7 @@ function CraftingController:refresh()
         ingLayout.Padding        = UDim.new(0, 6)
         ingLayout.Parent         = ingRow
 
-        for itemId, needed in pairs(recipe.requires) do
+        for itemId, needed in pairs(recipe.ingredients or {}) do
             local have    = countItem(itemId)
             local enough  = have >= needed
             local itemDef = ctx.Config.Items[itemId]
@@ -318,7 +348,6 @@ function CraftingController:refresh()
         makeCorner(craftBtn, 6)
 
         if craftable then
-            local recipeId = recipe.id
             craftBtn.MouseButton1Click:Connect(function()
                 ctx.Remotes.CraftRequest:FireServer(recipeId)
                 task.wait(0.2)
