@@ -11,6 +11,7 @@ local claimedResourceSpots = {}
 
 local worldState = {
     seed = 42,
+    runtimeSeed = 42,
     halfSize = 600,
     islandRadius = 520,
     beachRadius = 485,
@@ -18,6 +19,20 @@ local worldState = {
     step = 24,
     oceanFloorY = -160,
     oceanSurfaceY = 0,
+    centerX = 0,
+    centerZ = 0,
+    radialPower = 1.45,
+    heightScale = 22,
+    macroScale = 170,
+    microScale = 65,
+    detailScale = 32,
+    macroStrength = 8,
+    microStrength = 4,
+    detailStrength = 1.6,
+    ridgeAngle = 0,
+    ridgeStrength = 0,
+    ridgeFrequency = 0.006,
+    beachSoftness = 1,
 }
 
 local function lerp(a, b, t)
@@ -44,6 +59,51 @@ local function getWorldConfig()
     }
 end
 
+local function hashString(str)
+    if type(str) ~= "string" or str == "" then
+        return 0
+    end
+    local h = 0
+    for i = 1, #str do
+        h = (h * 33 + string.byte(str, i)) % 2147483647
+    end
+    return h
+end
+
+local function resolveRuntimeSeed(baseSeed)
+    local millis = DateTime.now().UnixTimestampMillis % 2147483647
+    local jobHash = hashString(game.JobId)
+    local mixed = (baseSeed * 1103515245 + millis + jobHash * 97 + 12345) % 2147483647
+    if mixed < 1 then
+        mixed = mixed + 2147483629
+    end
+    return mixed
+end
+
+local function configureTerrainShape(cfg)
+    local runtimeSeed = resolveRuntimeSeed(cfg.seed)
+    worldState.runtimeSeed = runtimeSeed
+    worldState.seed = runtimeSeed
+
+    local rng = Random.new(runtimeSeed)
+    worldState.centerX = rng:NextNumber(-70, 70)
+    worldState.centerZ = rng:NextNumber(-70, 70)
+    worldState.radialPower = rng:NextNumber(1.2, 1.95)
+    worldState.heightScale = rng:NextNumber(18, 29)
+
+    worldState.macroScale = rng:NextNumber(145, 235)
+    worldState.microScale = rng:NextNumber(45, 95)
+    worldState.detailScale = rng:NextNumber(24, 42)
+    worldState.macroStrength = rng:NextNumber(6, 11)
+    worldState.microStrength = rng:NextNumber(2.5, 5.8)
+    worldState.detailStrength = rng:NextNumber(0.8, 2.2)
+
+    worldState.ridgeAngle = rng:NextNumber(0, math.pi * 2)
+    worldState.ridgeStrength = rng:NextNumber(1.5, 6.5)
+    worldState.ridgeFrequency = rng:NextNumber(0.0035, 0.0095)
+    worldState.beachSoftness = rng:NextNumber(0.65, 1.35)
+end
+
 local function isInsideIslandXZ(x, z, padding)
     padding = padding or 0
     local dist = math.sqrt(x * x + z * z)
@@ -51,19 +111,29 @@ local function isInsideIslandXZ(x, z, padding)
 end
 
 local function terrainProfileAt(x, z)
-    local dist = math.sqrt(x * x + z * z)
+    local worldX = x - worldState.centerX
+    local worldZ = z - worldState.centerZ
+
+    local warpX = math.noise(worldX / (worldState.macroScale * 1.8), worldZ / (worldState.macroScale * 1.8), worldState.seed * 0.004) * 26
+    local warpZ = math.noise(worldX / (worldState.macroScale * 1.8), worldZ / (worldState.macroScale * 1.8), worldState.seed * 0.006) * 26
+    worldX = worldX + warpX
+    worldZ = worldZ + warpZ
+
+    local dist = math.sqrt(worldX * worldX + worldZ * worldZ)
     if dist > worldState.islandRadius then
         return nil
     end
 
     local radial = dist / worldState.islandRadius
-    local base = 22 * (1 - radial ^ 1.45) + 4
+    local base = worldState.heightScale * (1 - radial ^ worldState.radialPower) + 4
 
-    local macro = math.noise((x + worldState.seed * 0.17) / 170, (z - worldState.seed * 0.23) / 170, worldState.seed * 0.001)
-    local micro = math.noise((x - worldState.seed * 0.31) / 65, (z + worldState.seed * 0.11) / 65, worldState.seed * 0.002)
-    local detail = math.noise((x + worldState.seed * 0.47) / 32, (z + worldState.seed * 0.19) / 32, worldState.seed * 0.003)
+    local macro = math.noise((worldX + worldState.seed * 0.17) / worldState.macroScale, (worldZ - worldState.seed * 0.23) / worldState.macroScale, worldState.seed * 0.001)
+    local micro = math.noise((worldX - worldState.seed * 0.31) / worldState.microScale, (worldZ + worldState.seed * 0.11) / worldState.microScale, worldState.seed * 0.002)
+    local detail = math.noise((worldX + worldState.seed * 0.47) / worldState.detailScale, (worldZ + worldState.seed * 0.19) / worldState.detailScale, worldState.seed * 0.003)
+    local ridgeAxis = (worldX * math.cos(worldState.ridgeAngle) + worldZ * math.sin(worldState.ridgeAngle))
+    local ridge = math.sin(ridgeAxis * worldState.ridgeFrequency) * worldState.ridgeStrength
 
-    local height = base + macro * 8 + micro * 4 + detail * 1.6
+    local height = base + macro * worldState.macroStrength + micro * worldState.microStrength + detail * worldState.detailStrength + ridge
 
     local flatAlpha = 1 - math.clamp(dist / worldState.spawnFlatRadius, 0, 1)
     if flatAlpha > 0 then
@@ -72,7 +142,8 @@ local function terrainProfileAt(x, z)
     end
 
     if dist > worldState.beachRadius then
-        local beachAlpha = math.clamp((dist - worldState.beachRadius) / (worldState.islandRadius - worldState.beachRadius), 0, 1)
+        local beachAlpha = math.clamp((dist - worldState.beachRadius) / math.max(1, (worldState.islandRadius - worldState.beachRadius)), 0, 1)
+        beachAlpha = math.clamp(beachAlpha * worldState.beachSoftness, 0, 1)
         local beachHeight = lerp(3.2, 0.8, beachAlpha)
         height = math.min(height, beachHeight + micro * 0.4)
     end
@@ -202,11 +273,11 @@ end
 
 function WorldService:generateTerrain()
     local cfg = getWorldConfig()
-    worldState.seed = cfg.seed
+    configureTerrainShape(cfg)
     worldState.halfSize = cfg.halfSize
     worldState.islandRadius = math.max(160, cfg.halfSize - 70)
-    worldState.spawnFlatRadius = math.clamp(worldState.islandRadius * 0.22, 90, 155)
-    worldState.beachRadius = math.max(worldState.spawnFlatRadius + 240, worldState.islandRadius - 42)
+    worldState.spawnFlatRadius = math.clamp(worldState.islandRadius * 0.22, 90, 165)
+    worldState.beachRadius = math.max(worldState.spawnFlatRadius + 220, worldState.islandRadius - 40)
     worldState.step = 24
     worldState.oceanFloorY = -160
     worldState.oceanSurfaceY = 0
@@ -216,6 +287,7 @@ function WorldService:generateTerrain()
 
     local terrain = Workspace.Terrain
     terrain:Clear()
+    print("[WorldService] Runtime terrain seed:", worldState.runtimeSeed)
 
     local oceanDepth = worldState.oceanSurfaceY - worldState.oceanFloorY
     terrain:FillBlock(
