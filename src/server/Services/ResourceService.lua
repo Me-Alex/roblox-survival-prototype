@@ -18,6 +18,10 @@ local ctx
 local respawnQueue = {}
 local rng = Random.new()
 local DEFAULT_RESPAWN_TIME = 120
+local MAX_HARVEST_DISTANCE = 14
+local HARVEST_COOLDOWN_SECONDS = 0.25
+local MAX_STRUCTURE_PLACE_DISTANCE = 20
+local MIN_STRUCTURE_PLACE_DISTANCE = 2
 local DEFAULT_DROPS = {
     Tree = { item = "AshWood", min = 2, max = 4 },
     Rock = { item = "Stone", min = 2, max = 4 },
@@ -25,11 +29,30 @@ local DEFAULT_DROPS = {
     Fiber = { item = "Fiber", min = 2, max = 5 },
 }
 
+local lastHarvestByPlayer = {}
+local lastStructurePlaceByPlayer = {}
+
 local function randomInt(rng, min, max)
     return rng:NextInteger(min, max)
 end
 
 local function harvestNode(player, node)
+    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if not root then
+        return
+    end
+
+    local now = os.clock()
+    local userId = player.UserId
+    if now - (lastHarvestByPlayer[userId] or 0) < HARVEST_COOLDOWN_SECONDS then
+        return
+    end
+    lastHarvestByPlayer[userId] = now
+
+    if (root.Position - node.Position).Magnitude > MAX_HARVEST_DISTANCE then
+        return
+    end
+
     local nodeType = node:FindFirstChild("NodeType")
     local harvested = node:FindFirstChild("Harvested")
     local hitsLeft  = node:FindFirstChild("HitsLeft")
@@ -95,6 +118,11 @@ function ResourceService:init(context)
     ctx = context
     self:hookExistingNodes()
 
+    Players.PlayerRemoving:Connect(function(player)
+        lastHarvestByPlayer[player.UserId] = nil
+        lastStructurePlaceByPlayer[player.UserId] = nil
+    end)
+
     Workspace.ChildAdded:Connect(function(child)
         self:tryHookNode(child)
     end)
@@ -125,13 +153,42 @@ function ResourceService:tryHookNode(obj)
 end
 
 function ResourceService:placeStructure(player, structureId, position)
+    if typeof(position) ~= "Vector3" then
+        ctx.Remotes.Notify:FireClient(player, { text="Invalid placement target.", color="red" })
+        return
+    end
+
+    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if not root then
+        return
+    end
+
+    local now = os.clock()
+    local userId = player.UserId
+    if now - (lastStructurePlaceByPlayer[userId] or 0) < 0.35 then
+        return
+    end
+    lastStructurePlaceByPlayer[userId] = now
+
+    local dist = (root.Position - position).Magnitude
+    if dist > MAX_STRUCTURE_PLACE_DISTANCE then
+        ctx.Remotes.Notify:FireClient(player, { text="Too far away to place that.", color="red" })
+        return
+    end
+    if dist < MIN_STRUCTURE_PLACE_DISTANCE then
+        ctx.Remotes.Notify:FireClient(player, { text="Move back a little before placing.", color="yellow" })
+        return
+    end
+
+    local safePos = Vector3.new(position.X, math.max(1, position.Y), position.Z)
+
     if structureId == "CampfireKit" then
         if not ctx.InventoryService:hasItem(player, "CampfireKit", 1) then
             ctx.Remotes.Notify:FireClient(player, { text="No Campfire Kit!", color="red" })
             return
         end
         ctx.InventoryService:removeItem(player, "CampfireKit", 1)
-        ctx.WorldService:spawnCampfire(position)
+        ctx.WorldService:spawnCampfire(safePos)
         ctx.Remotes.Notify:FireClient(player, { text="Campfire placed!", color="green" })
 
     elseif structureId == "ShelterKit" then
@@ -140,7 +197,7 @@ function ResourceService:placeStructure(player, structureId, position)
             return
         end
         ctx.InventoryService:removeItem(player, "ShelterKit", 1)
-        self:placeShelter(position)
+        self:placeShelter(safePos)
         ctx.Remotes.Notify:FireClient(player, { text="Shelter built!", color="green" })
     end
 end
