@@ -1,4 +1,4 @@
--- Config.lua  (Milestone 7 — added Wildlife block)
+-- Config.lua  (Milestone 8 — Stone Oven + new cooking recipes)
 local Config = {}
 
 -- ── Vitals ───────────────────────────────────────────────────────────────
@@ -81,8 +81,8 @@ Config.Wildlife = {
         Health      = 15,
         WanderSpeed = 4,
         FleeSpeed   = 18,
-        FleeRadius  = 20,    -- studs; triggers flee state
-        RespawnTime = 60,    -- seconds before a new rabbit spawns
+        FleeRadius  = 20,
+        RespawnTime = 60,
         KillXp      = 10,
         Drops = {
             { item="RawMeat", min=1, max=2 },
@@ -113,43 +113,103 @@ Config.Progression = {
 
 -- ── Items ────────────────────────────────────────────────────────────────
 Config.Items = {
-    AshWood     = { displayName="Ash Wood",     category="resource", stackable=true },
-    Stone       = { displayName="Stone",         category="resource", stackable=true },
-    Fiber       = { displayName="Fiber",         category="resource", stackable=true },
-    Flint       = { displayName="Flint",         category="resource", stackable=true },
-    IronOre     = { displayName="Iron Ore",      category="resource", stackable=true },
-    RopeFiber   = { displayName="Rope Fiber",    category="resource", stackable=true },
-    OldCloth    = { displayName="Old Cloth",     category="resource", stackable=true },
-    Hide        = { displayName="Hide",          category="resource", stackable=true },
-    Bandage     = { displayName="Bandage",        category="tool",     stackable=true, onUse="curesBleeding" },
-    RawMeat     = { displayName="Raw Meat",       category="food",     stackable=true,
+    -- Resources
+    AshWood     = { displayName="Ash Wood",      category="resource", stackable=true },
+    Stone       = { displayName="Stone",          category="resource", stackable=true },
+    Fiber       = { displayName="Fiber",          category="resource", stackable=true },
+    Flint       = { displayName="Flint",          category="resource", stackable=true },
+    IronOre     = { displayName="Iron Ore",       category="resource", stackable=true },
+    RopeFiber   = { displayName="Rope Fiber",     category="resource", stackable=true },
+    OldCloth    = { displayName="Old Cloth",      category="resource", stackable=true },
+    Hide        = { displayName="Hide",           category="resource", stackable=true },
+
+    -- Food (campfire tier)
+    RawMeat     = { displayName="Raw Meat",        category="food", stackable=true,
                     food={ hungerRestore=20, thirstRestore=0 } },
-    CookedMeat  = { displayName="Cooked Meat",    category="food",     stackable=true,
+    CookedMeat  = { displayName="Cooked Meat",     category="food", stackable=true,
                     food={ hungerRestore=45, thirstRestore=5 } },
-    RawBerries  = { displayName="Raw Berries",    category="food",     stackable=true,
+    RawBerries  = { displayName="Raw Berries",     category="food", stackable=true,
                     food={ hungerRestore=8,  thirstRestore=4 } },
-    Mushroom    = { displayName="Mushroom",       category="food",     stackable=true,
+    Mushroom    = { displayName="Mushroom",        category="food", stackable=true,
                     food={ hungerRestore=12, thirstRestore=2 } },
-    StoneAxe    = { displayName="Stone Axe",      category="weapon",   stackable=false },
-    StoneSpear  = { displayName="Stone Spear",    category="weapon",   stackable=false },
-    Campfire    = { displayName="Campfire",       category="structure",stackable=false },
-    WoodWall    = { displayName="Wood Wall",      category="structure",stackable=false },
-    WoodFloor   = { displayName="Wood Floor",     category="structure",stackable=false },
-    LeatherArmor= { displayName="Leather Armor",  category="armor",    stackable=false },
-    Bedroll     = { displayName="Bedroll",        category="structure",stackable=false, placeable=true },
+
+    -- Food (oven tier)
+    MeatStew    = { displayName="Meat Stew",       category="food", stackable=true,
+                    food={ hungerRestore=70, thirstRestore=20 } },
+    MushroomSoup= { displayName="Mushroom Soup",   category="food", stackable=true,
+                    food={ hungerRestore=50, thirstRestore=35 } },
+    DriedMeat   = { displayName="Dried Meat",      category="food", stackable=true,
+                    food={ hungerRestore=55, thirstRestore=0 } },
+
+    -- Tools & weapons
+    Bandage     = { displayName="Bandage",         category="tool",    stackable=true,  onUse="curesBleeding" },
+    StoneAxe    = { displayName="Stone Axe",       category="weapon",  stackable=false },
+    StoneSpear  = { displayName="Stone Spear",     category="weapon",  stackable=false },
+
+    -- Structures
+    Campfire    = { displayName="Campfire",        category="structure", stackable=false },
+    WoodWall    = { displayName="Wood Wall",       category="structure", stackable=false },
+    WoodFloor   = { displayName="Wood Floor",      category="structure", stackable=false },
+    Bedroll     = { displayName="Bedroll",         category="structure", stackable=false, placeable=true },
+    StoneOven   = { displayName="Stone Oven",      category="structure", stackable=false, placeable=true },
+
+    -- Armor
+    LeatherArmor= { displayName="Leather Armor",   category="armor",     stackable=false },
 }
 
 -- ── Crafting recipes ─────────────────────────────────────────────────────
+-- Each recipe key matches the result item ID.
+-- Fields:
+--   category    — shown in the crafting UI tab
+--   ingredients — { itemId = quantity, ... }
+--   result      — item ID to give
+--   amount      — how many to give
+--   nearFire    — (optional) must be within campfire radius
+--   nearOven    — (optional) must be within stone oven radius
+--   If BOTH nearFire and nearOven are true, EITHER location is accepted.
+
 Config.Recipes = {
-    StoneAxe    = { category="Tools",    ingredients={ AshWood=2, Stone=3 },          result="StoneAxe",    amount=1 },
-    StoneSpear  = { category="Weapons",  ingredients={ AshWood=3, Flint=2 },          result="StoneSpear",  amount=1 },
-    Campfire    = { category="Survival", ingredients={ AshWood=5, Stone=4 },          result="Campfire",    amount=1 },
-    Bandage     = { category="Survival", ingredients={ Fiber=4,   OldCloth=2 },       result="Bandage",     amount=2 },
-    Bedroll     = { category="Survival", ingredients={ Fiber=3,   Hide=2, OldCloth=1},result="Bedroll",     amount=1 },
-    CookedMeat  = { category="Food",     ingredients={ RawMeat=1 },                   result="CookedMeat",  amount=1, nearFire=true },
-    WoodWall    = { category="Building", ingredients={ AshWood=6, RopeFiber=2 },      result="WoodWall",    amount=1 },
-    WoodFloor   = { category="Building", ingredients={ AshWood=4, RopeFiber=1 },      result="WoodFloor",   amount=1 },
-    LeatherArmor= { category="Armor",    ingredients={ Hide=6,    RopeFiber=3 },      result="LeatherArmor",amount=1 },
+    -- ── Tools & Weapons ──
+    StoneAxe     = { category="Tools",    result="StoneAxe",    amount=1,
+                     ingredients={ AshWood=2, Stone=3 } },
+    StoneSpear   = { category="Weapons",  result="StoneSpear",  amount=1,
+                     ingredients={ AshWood=3, Flint=2 } },
+
+    -- ── Survival ──
+    Campfire     = { category="Survival", result="Campfire",    amount=1,
+                     ingredients={ AshWood=5, Stone=4 } },
+    Bandage      = { category="Survival", result="Bandage",     amount=2,
+                     ingredients={ Fiber=4, OldCloth=2 } },
+    Bedroll      = { category="Survival", result="Bedroll",     amount=1,
+                     ingredients={ Fiber=3, Hide=2, OldCloth=1 } },
+
+    -- ── Building ──
+    WoodWall     = { category="Building", result="WoodWall",    amount=1,
+                     ingredients={ AshWood=6, RopeFiber=2 } },
+    WoodFloor    = { category="Building", result="WoodFloor",   amount=1,
+                     ingredients={ AshWood=4, RopeFiber=1 } },
+    StoneOven    = { category="Building", result="StoneOven",   amount=1,
+                     ingredients={ Stone=8, IronOre=3, AshWood=4 } },
+
+    -- ── Armor ──
+    LeatherArmor = { category="Armor",    result="LeatherArmor",amount=1,
+                     ingredients={ Hide=6, RopeFiber=3 } },
+
+    -- ── Food — Campfire tier (nearFire OR nearOven) ──
+    CookedMeat   = { category="Food",     result="CookedMeat",  amount=1,
+                     nearFire=true, nearOven=true,
+                     ingredients={ RawMeat=1 } },
+
+    -- ── Food — Oven tier (Stone Oven only) ──
+    MeatStew     = { category="Food",     result="MeatStew",    amount=1,
+                     nearOven=true,
+                     ingredients={ RawMeat=2, Mushroom=1, RawBerries=1 } },
+    MushroomSoup = { category="Food",     result="MushroomSoup",amount=2,
+                     nearOven=true,
+                     ingredients={ Mushroom=3, RawBerries=1 } },
+    DriedMeat    = { category="Food",     result="DriedMeat",   amount=2,
+                     nearOven=true,
+                     ingredients={ RawMeat=3, Stone=1 } },
 }
 
 return Config

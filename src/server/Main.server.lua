@@ -1,4 +1,4 @@
--- Main.server.lua  (Milestone 7)
+-- Main.server.lua  (Milestone 8)
 local RunService          = game:GetService("RunService")
 local ReplicatedStorage   = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -16,7 +16,8 @@ local CraftingService    = require(Services:WaitForChild("CraftingService"))
 local WorldService       = require(Services:WaitForChild("WorldService"))
 local ResourceService    = require(Services:WaitForChild("ResourceService"))
 local EnemyService       = require(Services:WaitForChild("EnemyService"))
-local WildlifeService    = require(Services:WaitForChild("WildlifeService"))  -- NEW
+local WildlifeService    = require(Services:WaitForChild("WildlifeService"))
+local StoneOvenService   = require(Services:WaitForChild("StoneOvenService"))  -- NEW
 local CombatService      = require(Services:WaitForChild("CombatService"))
 local ProgressionService = require(Services:WaitForChild("ProgressionService"))
 local ObjectiveService   = require(Services:WaitForChild("ObjectiveService"))
@@ -33,7 +34,8 @@ local ctx = {
     WorldService       = WorldService,
     ResourceService    = ResourceService,
     EnemyService       = EnemyService,
-    WildlifeService    = WildlifeService,   -- NEW
+    WildlifeService    = WildlifeService,
+    StoneOvenService   = StoneOvenService,   -- NEW
     CombatService      = CombatService,
     ProgressionService = ProgressionService,
     ObjectiveService   = ObjectiveService,
@@ -46,8 +48,9 @@ WorldService:init(ctx)
 ResourceService:init(ctx)
 VitalsService:init(ctx)
 InventoryService:init(ctx)
+StoneOvenService:init(ctx)   -- NEW (before CraftingService so isNearOven is ready)
 CraftingService:init(ctx)
-WildlifeService:init(ctx)   -- NEW (before Combat so Combat can reference it)
+WildlifeService:init(ctx)
 EnemyService:init(ctx)
 CombatService:init(ctx)
 ProgressionService:init(ctx)
@@ -65,7 +68,7 @@ end)
 local tickables = {
     WorldService, ResourceService,
     VitalsService, EnemyService,
-    WildlifeService,   -- NEW
+    WildlifeService,
     CombatService,
 }
 
