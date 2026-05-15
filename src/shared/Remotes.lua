@@ -1,4 +1,4 @@
--- Remotes.lua
+-- Remotes.lua  (Milestone 4 — added RespawnRequest)
 local RS = game:GetService("ReplicatedStorage")
 
 local function getOrCreate(parent, name)
@@ -18,16 +18,19 @@ if not container then
 end
 
 local Remotes = {}
+-- Server → Client
 Remotes.VitalsUpdate     = getOrCreate(container, "VitalsUpdate")
 Remotes.InventoryUpdate  = getOrCreate(container, "InventoryUpdate")
 Remotes.Notify           = getOrCreate(container, "Notify")
 Remotes.ResourceChanged  = getOrCreate(container, "ResourceChanged")
 Remotes.DayNightUpdate   = getOrCreate(container, "DayNightUpdate")
 Remotes.ObjectiveUpdate  = getOrCreate(container, "ObjectiveUpdate")
+-- Client → Server
 Remotes.CraftRequest     = getOrCreate(container, "CraftRequest")
 Remotes.UseItem          = getOrCreate(container, "UseItem")
 Remotes.DropItem         = getOrCreate(container, "DropItem")
 Remotes.PlaceStructure   = getOrCreate(container, "PlaceStructure")
 Remotes.AttackRequest    = getOrCreate(container, "AttackRequest")
+Remotes.RespawnRequest   = getOrCreate(container, "RespawnRequest")  -- NEW
 
 return Remotes

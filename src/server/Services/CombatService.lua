@@ -1,193 +1,120 @@
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+-- CombatService.lua  (Milestone 4)
+-- Handles player attack requests.
+-- Client fires AttackRequest { targetId } when the player clicks/swings.
+-- Server validates distance, cooldown, equipped weapon, then applies damage
+-- to the target (NightStalker model or another player).
 
-local Config = require(ReplicatedStorage.Shared.SurvivalConfig)
-local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local Players   = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
 
 local CombatService = {}
+local ctx
 
-local context
-local lastAttackByPlayer = {}
-local lastUnarmedHintByPlayer = {}
-local UNEQUIPPED_HINT_COOLDOWN_SECONDS = 4
+-- Per-player attack cooldown tracker
+local cooldowns = {}   -- cooldowns[player] = time remaining
 
--- 10% base crit chance; Iron Spear gets a bonus 5% on top.
-local CRIT_CHANCE = 0.10
-local IRON_SPEAR_CRIT_BONUS = 0.05
-local CRIT_MULTIPLIER = 2.0
+-- ── Helpers ───────────────────────────────────────────────────────────────
 
-local random = Random.new()
-
-local function getRoot(player)
-	local character = player.Character
-	if not character then
-		return nil
-	end
-
-	return character:FindFirstChild("HumanoidRootPart")
+local function getEquippedWeapon(player)
+    -- Check if player has a weapon tool in their character
+    local char = player.Character
+    if not char then return nil end
+    for _, tool in ipairs(char:GetChildren()) do
+        if tool:IsA("Tool") then
+            -- Check if it's one of our weapon/tool items
+            local itemId = tool:GetAttribute("ItemId")
+            if itemId then
+                local cfg = ctx.Config.Items[itemId]
+                if cfg then return itemId, cfg end
+            end
+        end
+    end
+    return nil
 end
 
-local function getBestWeapon(player)
-	local equippedWeapon = context.InventoryService.getEquippedItem(player, "Weapon")
-	if equippedWeapon and Config.Combat.Weapons[equippedWeapon] then
-		return equippedWeapon, Config.Combat.Weapons[equippedWeapon]
-	end
-
-	return "Fists", {
-		Damage = Config.Combat.DefaultDamage,
-		Range = Config.Combat.DefaultRange,
-	}
+local function getWeaponDamage(itemId)
+    local cfg = ctx.Config.Combat
+    if itemId == "StoneAxe"   then return cfg.AxeDamage   end
+    if itemId == "StoneSpear" then return cfg.SpearDamage end
+    return cfg.FistDamage
 end
 
-local function hasStowedWeapon(player)
-	for _, weaponId in ipairs({ "IronSpear", "Spear", "Pickaxe", "StoneAxe" }) do
-		if context.InventoryService.hasItem(player, weaponId, 1) then
-			return true
-		end
-	end
-
-	return false
+-- Find which stalker model a given Part belongs to
+local function findStalkerModel(part)
+    local obj = part
+    while obj and obj.Parent do
+        if obj:IsA("Model") and obj.Name == "NightStalker" then
+            return obj
+        end
+        obj = obj.Parent
+    end
+    return nil
 end
 
-local function getClosestTarget(root, range)
-	local closestTarget
-	local closestDistance = range
-	local isWildlife = false
+-- ── Init ──────────────────────────────────────────────────────────────────
 
-	-- Check hostile enemies
-	for _, enemy in ipairs(context.EnemyService.getEnemies()) do
-		if enemy.PrimaryPart then
-			local offset = enemy:GetPivot().Position - root.Position
-			local distance = offset.Magnitude
+function CombatService:init(context)
+    ctx = context
 
-			if distance <= closestDistance and distance > 0.1 then
-				local facing = root.CFrame.LookVector:Dot(offset.Unit)
+    ctx.Remotes.AttackRequest.OnServerEvent:Connect(function(player, targetId)
+        self:handleAttack(player, targetId)
+    end)
 
-				if facing > -0.15 then
-					closestDistance = distance
-					closestTarget = enemy
-					isWildlife = false
-				end
-			end
-		end
-	end
+    -- Tick cooldowns down
+    -- (done inside CombatService:tick, called from Main.server)
 
-	-- Check passive wildlife
-	for model in pairs(context.EnemyService.getActiveWildlife()) do
-		if model.PrimaryPart then
-			local offset = model:GetPivot().Position - root.Position
-			local distance = offset.Magnitude
+    -- Player touching a NightStalker is handled in EnemyService tick (melee range check)
+    -- This service handles PLAYER-INITIATED attacks (swing with tool)
 
-			if distance <= closestDistance and distance > 0.1 then
-				local facing = root.CFrame.LookVector:Dot(offset.Unit)
-
-				if facing > -0.15 then
-					closestDistance = distance
-					closestTarget = model
-					isWildlife = true
-				end
-			end
-		end
-	end
-
-	return closestTarget, isWildlife
+    print("[CombatService] Initialised")
 end
 
--- Returns finalDamage, isCrit
-local function calculateDamage(weaponName, baseDamage)
-	local critChance = CRIT_CHANCE
-	if weaponName == "IronSpear" then
-		critChance = critChance + IRON_SPEAR_CRIT_BONUS
-	end
+function CombatService:handleAttack(player, targetId)
+    -- Cooldown check
+    local cd = cooldowns[player] or 0
+    if cd > 0 then return end
+    cooldowns[player] = ctx.Config.Combat.AttackCooldown
 
-	local isCrit = random:NextNumber() < critChance
-	local finalDamage = isCrit and math.floor(baseDamage * CRIT_MULTIPLIER) or baseDamage
-	return finalDamage, isCrit
+    -- Find target part in workspace
+    local targetPart = Workspace:FindFirstChild(targetId, true)
+    if not targetPart then return end
+
+    -- Distance check (must be within 10 studs)
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    if (targetPart.Position - root.Position).Magnitude > 10 then return end
+
+    -- Determine damage
+    local itemId   = getEquippedWeapon(player)
+    local damage   = getWeaponDamage(itemId)
+
+    -- Is it a NightStalker?
+    local stalkerModel = findStalkerModel(targetPart)
+    if stalkerModel then
+        ctx.EnemyService:registerHit(stalkerModel, player, damage)
+        ctx.Remotes.Notify:FireClient(player, {
+            text  = "Hit! -" .. damage,
+            color = "yellow",
+        })
+        return
+    end
+
+    -- Could be another player (PvP) — skip for now (PvP not in scope yet)
 end
 
-function CombatService.attack(player)
-	local now = os.clock()
-
-	if now - (lastAttackByPlayer[player] or 0) < Config.Combat.CooldownSeconds then
-		return false, "Recovering."
-	end
-
-	lastAttackByPlayer[player] = now
-
-	local root = getRoot(player)
-	if not root then
-		return false, "Character is not ready."
-	end
-
-	local weaponName, weaponConfig = getBestWeapon(player)
-	if weaponName == "Fists" and hasStowedWeapon(player) then
-		local lastHintAt = lastUnarmedHintByPlayer[player] or 0
-		if now - lastHintAt >= UNEQUIPPED_HINT_COOLDOWN_SECONDS then
-			lastUnarmedHintByPlayer[player] = now
-			Remotes.get("Notification"):FireClient(player, "Equip a weapon to use its full damage.")
-		end
-	end
-
-	local target, targetIsWildlife = getClosestTarget(root, weaponConfig.Range)
-
-	if not target then
-		return false, "No enemy in range."
-	end
-
-	-- Apply crit roll before passing damage to EnemyService.
-	local finalDamage, isCrit = calculateDamage(weaponName, weaponConfig.Damage)
-
-	local ok, message
-	if targetIsWildlife then
-		ok, message = context.EnemyService.damageWildlife(player, target, finalDamage)
-	else
-		ok, message = context.EnemyService.damageEnemy(player, target, finalDamage)
-	end
-
-	if ok then
-		if Config.Equipment[weaponName] then
-			context.InventoryService.damageEquipment(player, weaponName, 1)
-		end
-
-		if context.ProgressionService then
-			context.ProgressionService.addXP(player, Config.Progression.XP.EnemyHit, "combat")
-		end
-
-		local itemConfig = Config.Items[weaponName]
-		local displayName = itemConfig and itemConfig.DisplayName or weaponName
-
-		local hitMsg
-		if isCrit then
-			hitMsg = string.format("%s: CRITICAL! %s", displayName, message)
-		else
-			hitMsg = string.format("%s: %s", displayName, message)
-		end
-
-		Remotes.get("Notification"):FireClient(player, hitMsg)
-
-		-- Fire EnemyDamaged so the client can show a floating damage number.
-		if target.PrimaryPart then
-			Remotes.get("EnemyDamaged"):FireClient(player, {
-				Position = target:GetPivot().Position,
-				Damage = finalDamage,
-				IsCrit = isCrit,
-			})
-		end
-	end
-
-	return ok, message
-end
-
-function CombatService.init(newContext)
-	context = newContext
-
-	Remotes.get("AttackRequest").OnServerInvoke = function(player)
-		return CombatService.attack(player)
-	end
-end
-
-function CombatService.playerRemoving(player)
-	lastAttackByPlayer[player] = nil
-	lastUnarmedHintByPlayer[player] = nil
+function CombatService:tick(dt)
+    for player, cd in pairs(cooldowns) do
+        if cd > 0 then
+            cooldowns[player] = cd - dt
+        end
+    end
+    -- Clean up disconnected players
+    for player in pairs(cooldowns) do
+        if not player.Parent then
+            cooldowns[player] = nil
+        end
+    end
 end
 
 return CombatService

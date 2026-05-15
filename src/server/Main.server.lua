@@ -1,5 +1,6 @@
--- Main.server.lua  (Milestone 2)
+-- Main.server.lua  (Milestone 4)
 local RunService          = game:GetService("RunService")
+local Players             = game:GetService("Players")
 local ReplicatedStorage   = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
@@ -44,7 +45,15 @@ ShopService:init(ctx)
 
 print("[Server] All services initialised.")
 
-local tickables = { WorldService, ResourceService, VitalsService, EnemyService }
+-- Respawn handler
+Remotes.RespawnRequest.OnServerEvent:Connect(function(player)
+    player:LoadCharacter()
+end)
+
+local tickables = {
+    WorldService, ResourceService,
+    VitalsService, EnemyService, CombatService,
+}
 
 RunService.Heartbeat:Connect(function(dt)
     for _, svc in ipairs(tickables) do

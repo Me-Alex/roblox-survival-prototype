@@ -1,6 +1,4 @@
--- Main.client.lua  (Milestone 3)
--- Client entry point. Loads all controllers and wires them with a shared context.
-
+-- Main.client.lua  (Milestone 4)
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -15,6 +13,7 @@ local Controllers = script.Parent:WaitForChild("Controllers")
 local HudController       = require(Controllers:WaitForChild("HudController"))
 local InventoryController = require(Controllers:WaitForChild("InventoryController"))
 local CraftingController  = require(Controllers:WaitForChild("CraftingController"))
+local DeathController     = require(Controllers:WaitForChild("DeathController"))
 
 local ctx = {
     Config  = Config,
@@ -22,10 +21,13 @@ local ctx = {
     HudController       = HudController,
     InventoryController = InventoryController,
     CraftingController  = CraftingController,
+    DeathController     = DeathController,
+    DayNightCache       = { day = 1, isNight = false },
 }
 
 HudController:init(ctx)
 InventoryController:init(ctx)
 CraftingController:init(ctx)
+DeathController:init(ctx)
 
 print("[Client] All controllers initialised.")
