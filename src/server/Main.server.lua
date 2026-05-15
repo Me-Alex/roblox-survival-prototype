@@ -1,7 +1,7 @@
 -- Main.server.lua  (Milestone 10)
 local RunService          = game:GetService("RunService")
+local Players             = game:GetService("Players")
 local ReplicatedStorage   = game:GetService("ReplicatedStorage")
-local ServerScriptService = game:GetService("ServerScriptService")
 
 local Shared  = ReplicatedStorage:WaitForChild("Shared")
 local Config  = require(Shared:WaitForChild("Config"))
@@ -9,7 +9,7 @@ local Remotes = require(Shared:WaitForChild("Remotes"))
 
 Remotes:init(ReplicatedStorage)
 
-local Services = ServerScriptService:WaitForChild("Services")
+local Services = script.Parent:WaitForChild("Services")
 local VitalsService      = require(Services:WaitForChild("VitalsService"))
 local InventoryService   = require(Services:WaitForChild("InventoryService"))
 local CraftingService    = require(Services:WaitForChild("CraftingService"))
@@ -48,24 +48,63 @@ local ctx = {
     RespawnService     = RespawnService,    -- NEW
 }
 
-WorldService:init(ctx)
-ResourceService:init(ctx)
-VitalsService:init(ctx)
-InventoryService:init(ctx)
-StoneOvenService:init(ctx)
-CraftingService:init(ctx)
-WildlifeService:init(ctx)
-WaterService:init(ctx)
-EnemyService:init(ctx)
-CombatService:init(ctx)
-ProgressionService:init(ctx)
-ObjectiveService:init(ctx)
-PersistenceService:init(ctx)
-ShopService:init(ctx)
-SleepService:init(ctx)
-RespawnService:init(ctx)    -- NEW
+local startupOrder = {
+    WorldService,
+    ResourceService,
+    VitalsService,
+    InventoryService,
+    StoneOvenService,
+    CraftingService,
+    WildlifeService,
+    WaterService,
+    EnemyService,
+    CombatService,
+    ProgressionService,
+    ObjectiveService,
+    PersistenceService,
+    ShopService,
+    SleepService,
+    RespawnService,
+}
+
+for _, service in ipairs(startupOrder) do
+    if service.init then
+        local ok, err = pcall(service.init, service, ctx)
+        if not ok then
+            warn("[Server init failed]", err)
+        end
+    end
+end
 
 print("[Server] All services initialised.")
+
+local function onPlayerAdded(player)
+    for _, service in ipairs(startupOrder) do
+        if service.playerAdded then
+            local ok, err = pcall(service.playerAdded, service, player)
+            if not ok then
+                warn("[PlayerAdded service error]", err)
+            end
+        end
+    end
+end
+
+local function onPlayerRemoving(player)
+    for _, service in ipairs(startupOrder) do
+        if service.playerRemoving then
+            local ok, err = pcall(service.playerRemoving, service, player)
+            if not ok then
+                warn("[PlayerRemoving service error]", err)
+            end
+        end
+    end
+end
+
+Players.PlayerAdded:Connect(onPlayerAdded)
+Players.PlayerRemoving:Connect(onPlayerRemoving)
+for _, player in ipairs(Players:GetPlayers()) do
+    task.spawn(onPlayerAdded, player)
+end
 
 Remotes.RespawnRequest.OnServerEvent:Connect(function(player)
     player:LoadCharacter()

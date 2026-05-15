@@ -8,10 +8,13 @@
         "$path": "src/server"
       }
     },
-    "StarterPlayerScripts": {
-      "$className": "StarterPlayerScripts",
-      "Client": {
-        "$path": "src/client"
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "Client": {
+          "$path": "src/client"
+        }
       }
     },
     "ReplicatedStorage": {
