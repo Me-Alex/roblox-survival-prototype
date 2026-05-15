@@ -1,107 +1,118 @@
--- Config.lua  (Milestone 2)
+-- Config.lua  (Milestone 5 — added StatusThresholds + NightStalker block)
+-- Central config for the whole game. All numbers live here so you can
+-- tweak difficulty without hunting through service files.
+
 local Config = {}
 
-Config.World = {
-    HalfSize       = 512,
-    Seed           = 42,
-    DayLengthSecs  = 480,
-    NightStartClock= 20,
-    NightEndClock  = 6,
-}
-
+-- ── Vitals ─────────────────────────────────────────────────────────────────
 Config.Vitals = {
-    MaxHealth      = 100,
-    MaxHunger      = 100,
-    MaxThirst      = 100,
-    MaxTemperature = 100,
+    MaxHealth        = 100,
+    MaxHunger        = 100,
+    MaxThirst        = 100,
+    MaxTemperature   = 100,
+    MaxStamina       = 100,
 
-    HungerDecayRate     = 0.8,
-    ThirstDecayRate     = 1.2,
-    TempDecayRateDay    = 0.3,
-    TempDecayRateNight  = 1.4,
+    HungerDecayRate  = 1,     -- per second
+    ThirstDecayRate  = 1.5,
+    NightTempDrain   = 1,
+    RainTempDrain    = 2,
 
-    StarveDamage        = 2,
-    DehydrateDamage     = 3,
-    HypothermiaDamage   = 2,
-
-    CampfireWarmRadius  = 20,
-    CampfireWarmRate    = 8,
-
-    FoodRestore = {
-        RawBerries    = { hunger=12, thirst=4  },
-        RawMeat       = { hunger=18, thirst=-2 },
-        CookedMeat    = { hunger=35, thirst=5  },
-        AshBread      = { hunger=28, thirst=2  },
-        MushroomStew  = { hunger=40, thirst=10 },
-    },
+    StarveDamage     = 2,     -- hp/s when hunger = 0
+    DehydrateDamage  = 3,
+    FreezeDamage     = 2,
+    BleedDamage      = 4,
+    PoisonDamage     = 3,
+    HealthRegen      = 0.5,   -- hp/s when comfortable
 }
 
-Config.Resources = {
-    TreeCount   = 60,
-    RockCount   = 50,
-    BushCount   = 40,
-    FiberCount  = 35,
-    MinSpacing  = 22,
-    RespawnTime = 180,
-    Hits = {
-        Tree  = 3,
-        Rock  = 4,
-        Bush  = 1,
-        Fiber = 1,
-    },
-    Drops = {
-        Tree  = { item="AshWood",    min=2, max=5 },
-        Rock  = { item="Stone",      min=3, max=6 },
-        Bush  = { item="RawBerries", min=2, max=4 },
-        Fiber = { item="Fiber",      min=3, max=6 },
-    },
+-- ── Status thresholds ──────────────────────────────────────────────────────
+-- These drive both the HUD badges and the damage tick logic.
+Config.StatusThresholds = {
+    FreezingTemp      = 20,   -- below this → Freezing badge + damage
+    ExhaustedStamina  = 15,   -- below this → Exhausted badge
+    RestedStamina     = 80,   -- above this (daytime) → Rested badge
+    StarvingHunger    = 15,   -- below this → Starving badge + damage
+    DehydratedThirst  = 15,   -- below this → Dehydrated badge + damage
 }
 
-Config.Items = {
-    AshWood      = { displayName="Ash Wood",     stackSize=20, category="resource" },
-    Stone        = { displayName="Stone",         stackSize=30, category="resource" },
-    Fiber        = { displayName="Fiber",         stackSize=30, category="resource" },
-    RawBerries   = { displayName="Raw Berries",   stackSize=10, category="food"     },
-    RawMeat      = { displayName="Raw Meat",      stackSize=5,  category="food"     },
-    IronOre      = { displayName="Iron Ore",      stackSize=15, category="resource" },
-    StoneAxe     = { displayName="Stone Axe",     stackSize=1,  category="tool",    durability=40 },
-    StoneSpear   = { displayName="Stone Spear",   stackSize=1,  category="weapon",  durability=30 },
-    Torch        = { displayName="Torch",          stackSize=3,  category="tool"    },
-    CampfireKit  = { displayName="Campfire Kit",  stackSize=2,  category="placeable" },
-    ShelterKit   = { displayName="Shelter Kit",   stackSize=1,  category="placeable" },
-    CookedMeat   = { displayName="Cooked Meat",   stackSize=5,  category="food"    },
-    AshBread     = { displayName="Ash Bread",     stackSize=5,  category="food"    },
-    MushroomStew = { displayName="Mushroom Stew", stackSize=3,  category="food"    },
-    AshMushroom  = { displayName="Ash Mushroom",  stackSize=10, category="food"    },
-}
-
-Config.Recipes = {
-    { id="StoneAxe",    requires={AshWood=2,Stone=3},         gives={item="StoneAxe",   amount=1}, category="Tools"   },
-    { id="StoneSpear",  requires={AshWood=3,Stone=2,Fiber=2}, gives={item="StoneSpear", amount=1}, category="Weapons" },
-    { id="Torch",       requires={AshWood=1,Fiber=1},         gives={item="Torch",      amount=2}, category="Tools"   },
-    { id="CampfireKit", requires={AshWood=4,Stone=3},         gives={item="CampfireKit",amount=1}, category="Survival"},
-    { id="ShelterKit",  requires={AshWood=8,Fiber=4},         gives={item="ShelterKit", amount=1}, category="Survival"},
-    { id="CookedMeat",  requires={RawMeat=1},                 gives={item="CookedMeat", amount=1}, category="Food", nearFire=true },
-    { id="AshBread",    requires={AshMushroom=2,Fiber=1},     gives={item="AshBread",   amount=1}, category="Food", nearFire=true },
-}
-
+-- ── Combat ─────────────────────────────────────────────────────────────────
 Config.Combat = {
-    FistDamage     = 8,
-    AxeDamage      = 22,
-    SpearDamage    = 18,
-    AttackCooldown = 0.6,
+    FistDamage     = 5,
+    AxeDamage      = 18,
+    SpearDamage    = 28,
+    AttackCooldown = 0.6,   -- seconds between swings
+
     NightStalker = {
-        Health=60, Damage=12, Speed=14, AggroRadius=40,
-        SpawnRadius=200, MaxCount=6,
-        Drops={ { item="RawMeat", min=1, max=2 } },
+        Health      = 60,
+        Damage      = 12,
+        Speed       = 10,
+        AggroRadius = 60,
+        SpawnRadius = 220,   -- studs from map centre
+        MaxCount    = 6,
+        Drops = {
+            { item = "RawMeat", min = 1, max = 3 },
+            { item = "Hide",    min = 1, max = 2 },
+        },
     },
 }
 
-Config.Inventory = { SlotCount = 20 }
-
+-- ── Progression ────────────────────────────────────────────────────────────
 Config.Progression = {
-    XpPerLevel=200, MaxLevel=30,
-    HarvestXp=10, CraftXp=20, KillXp=30, SurviveDayXp=50,
+    KillXp       = 25,
+    CraftXp      = 10,
+    HarvestXp    = 5,
+    LevelsXp     = { 0, 100, 250, 500, 900, 1400, 2000, 2800, 3800, 5000 },
+}
+
+-- ── Resources ──────────────────────────────────────────────────────────────
+Config.Resources = {
+    Tree   = { item="AshWood",  min=2, max=4, respawn=30 },
+    Rock   = { item="Stone",    min=3, max=6, respawn=45 },
+    Fiber  = { item="Fiber",    min=2, max=5, respawn=20 },
+    Berry  = { item="RawBerries",min=2,max=5, respawn=25 },
+    Iron   = { item="IronOre",  min=1, max=3, respawn=90 },
+    Mushroom={item="Mushroom",  min=1, max=3, respawn=35 },
+    Cache  = { lootTable={"RopeFiber","Flint","Bandage","OldCloth"}, respawn=120 },
+}
+
+-- ── Items ──────────────────────────────────────────────────────────────────
+Config.Items = {
+    AshWood    = { displayName="Ash Wood",    category="resource", stackable=true },
+    Stone      = { displayName="Stone",        category="resource", stackable=true },
+    Fiber      = { displayName="Fiber",        category="resource", stackable=true },
+    Flint      = { displayName="Flint",        category="resource", stackable=true },
+    IronOre    = { displayName="Iron Ore",     category="resource", stackable=true },
+    RopeFiber  = { displayName="Rope Fiber",   category="resource", stackable=true },
+    OldCloth   = { displayName="Old Cloth",    category="resource", stackable=true },
+    Hide       = { displayName="Hide",         category="resource", stackable=true },
+    Bandage    = { displayName="Bandage",       category="tool",     stackable=true,
+                   onUse = "curesBleeding" },
+    RawMeat    = { displayName="Raw Meat",      category="food",     stackable=true,
+                   food = { hungerRestore=20, thirstRestore=0  } },
+    CookedMeat = { displayName="Cooked Meat",   category="food",     stackable=true,
+                   food = { hungerRestore=45, thirstRestore=5  } },
+    RawBerries = { displayName="Raw Berries",   category="food",     stackable=true,
+                   food = { hungerRestore=8,  thirstRestore=4  } },
+    Mushroom   = { displayName="Mushroom",      category="food",     stackable=true,
+                   food = { hungerRestore=12, thirstRestore=2  } },
+    StoneAxe   = { displayName="Stone Axe",     category="weapon",   stackable=false },
+    StoneSpear = { displayName="Stone Spear",   category="weapon",   stackable=false },
+    Campfire   = { displayName="Campfire",      category="structure",stackable=false },
+    WoodWall   = { displayName="Wood Wall",     category="structure",stackable=false },
+    WoodFloor  = { displayName="Wood Floor",    category="structure",stackable=false },
+    LeatherArmor={ displayName="Leather Armor",category="armor",    stackable=false },
+}
+
+-- ── Crafting recipes ───────────────────────────────────────────────────────
+Config.Recipes = {
+    StoneAxe   = { category="Tools",    ingredients={ AshWood=2, Stone=3 },      result="StoneAxe",    amount=1 },
+    StoneSpear = { category="Weapons",  ingredients={ AshWood=3, Flint=2 },      result="StoneSpear",  amount=1 },
+    Campfire   = { category="Survival", ingredients={ AshWood=5, Stone=4 },      result="Campfire",    amount=1, nearFire=false },
+    Bandage    = { category="Survival", ingredients={ Fiber=4,   OldCloth=2 },   result="Bandage",     amount=2 },
+    CookedMeat = { category="Food",     ingredients={ RawMeat=1 },               result="CookedMeat",  amount=1, nearFire=true  },
+    WoodWall   = { category="Building", ingredients={ AshWood=6, RopeFiber=2 },  result="WoodWall",    amount=1 },
+    WoodFloor  = { category="Building", ingredients={ AshWood=4, RopeFiber=1 },  result="WoodFloor",   amount=1 },
+    LeatherArmor={ category="Armor",    ingredients={ Hide=6,    RopeFiber=3 },  result="LeatherArmor",amount=1 },
 }
 
 return Config

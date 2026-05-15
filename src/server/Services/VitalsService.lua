@@ -1,172 +1,185 @@
--- VitalsService.lua  (Milestone 3)
--- Manages health, hunger, thirst, temperature per player.
--- Tick decays vitals over time, applies damage when they hit zero.
--- UseItem remote handler: eating food restores hunger/thirst.
+-- VitalsService.lua  (Milestone 5)
+-- What changed from Milestone 2:
+--   • computeStatuses() calculates boolean flags from current vitals.
+--   • VitalsUpdate now includes `statuses` table.
+--   • Thresholds come from Config.StatusThresholds.
 
 local Players = game:GetService("Players")
 
 local VitalsService = {}
 local ctx
 
--- Per-player vitals table
--- vitals[player] = { health, hunger, thirst, temp }
-local vitals = {}
+local vitals     = {}   -- vitals[player] = { health, hunger, thirst, temp, stamina, bleeding, poisoned, soaked }
+local tickTimer  = 0
+local TICK_RATE  = 1    -- send update every 1 second
 
-local SEND_INTERVAL = 0.5   -- seconds between sending vitals to client
-local timers = {}           -- timers[player] = seconds since last send
+-- ── Defaults ───────────────────────────────────────────────────────────────
 
--- ── Helpers ───────────────────────────────────────────────────────────────
-
-local function getVitals(player)
-    if not vitals[player] then
-        vitals[player] = {
-            health = ctx.Config.Vitals.MaxHealth,
-            hunger = ctx.Config.Vitals.MaxHunger,
-            thirst = ctx.Config.Vitals.MaxThirst,
-            temp   = ctx.Config.Vitals.MaxTemperature,
-        }
-        timers[player] = 0
-    end
-    return vitals[player]
+local function defaultVitals()
+    local V = ctx.Config.Vitals
+    return {
+        health   = V.MaxHealth,
+        hunger   = V.MaxHunger,
+        thirst   = V.MaxThirst,
+        temp     = V.MaxTemperature,
+        stamina  = V.MaxStamina or 100,
+        bleeding = false,
+        poisoned = false,
+        soaked   = false,
+    }
 end
 
-local function clamp(v, min, max)
-    if v < min then return min end
-    if v > max then return max end
-    return v
+-- ── Status flag computation ─────────────────────────────────────────────────
+-- Returns a flat table of boolean flags for the HUD.
+
+local function computeStatuses(v, isNight, isRaining)
+    local T = ctx.Config.StatusThresholds
+    return {
+        bleeding   = v.bleeding  == true,
+        poisoned   = v.poisoned  == true,
+        soaked     = v.soaked    == true or (isRaining == true),
+        freezing   = v.temp      <  T.FreezingTemp,
+        exhausted  = v.stamina   <  T.ExhaustedStamina,
+        rested     = v.stamina   >= T.RestedStamina and not isNight,
+        starving   = v.hunger    <  T.StarvingHunger,
+        dehydrated = v.thirst    <  T.DehydratedThirst,
+    }
 end
 
-local function sendVitals(player)
+-- ── Broadcast to one player ─────────────────────────────────────────────────
+
+local function broadcast(player)
     local v = vitals[player]
     if not v then return end
+    local isNight   = ctx.WorldService and ctx.WorldService:isNight()   or false
+    local isRaining = ctx.WorldService and ctx.WorldService:isRaining() or false
     ctx.Remotes.VitalsUpdate:FireClient(player, {
-        health = v.health,
-        hunger = v.hunger,
-        thirst = v.thirst,
-        temp   = v.temp,
+        health   = v.health,
+        hunger   = v.hunger,
+        thirst   = v.thirst,
+        temp     = v.temp,
+        stamina  = v.stamina,
+        statuses = computeStatuses(v, isNight, isRaining),
     })
 end
 
-local function applyHumanoidDamage(player, amount)
-    local char = player.Character
-    local hum  = char and char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum.Health = math.max(0, hum.Health - amount)
-    end
-end
-
--- ── Food use ──────────────────────────────────────────────────────────────
-
-local function useFood(player, itemId)
-    local restore = ctx.Config.Vitals.FoodRestore[itemId]
-    if not restore then return false end
-    local v   = getVitals(player)
-    local V   = ctx.Config.Vitals
-    v.hunger  = clamp(v.hunger + (restore.hunger or 0), 0, V.MaxHunger)
-    v.thirst  = clamp(v.thirst + (restore.thirst or 0), 0, V.MaxThirst)
-    sendVitals(player)
-    local itemCfg = ctx.Config.Items[itemId]
-    local name = itemCfg and itemCfg.displayName or itemId
-    ctx.Remotes.Notify:FireClient(player, {
-        text  = "Ate " .. name,
-        color = "green",
-    })
-    return true
-end
-
--- ── Init ──────────────────────────────────────────────────────────────────
+-- ── Init ───────────────────────────────────────────────────────────────────
 
 function VitalsService:init(context)
     ctx = context
 
-    -- Initialise vitals when player joins
     Players.PlayerAdded:Connect(function(player)
-        getVitals(player)
-        -- Send initial values shortly after (character needs to load)
-        task.delay(2, function()
-            sendVitals(player)
-        end)
+        vitals[player] = defaultVitals()
+        broadcast(player)
     end)
 
-    -- Clean up when player leaves
     Players.PlayerRemoving:Connect(function(player)
         vitals[player] = nil
-        timers[player] = nil
     end)
 
-    -- UseItem remote: eat food or use tool
-    ctx.Remotes.UseItem.OnServerEvent:Connect(function(player, slotIndex)
-        local slot = ctx.InventoryService:getSlot(player, slotIndex)
-        if not slot or not slot.itemId then return end
-
-        local itemCfg = ctx.Config.Items[slot.itemId]
-        if not itemCfg then return end
-
-        if itemCfg.category == "food" then
-            local ate = useFood(player, slot.itemId)
-            if ate then
-                ctx.InventoryService:removeItem(player, slot.itemId, 1)
-            end
-        elseif itemCfg.category == "tool" or itemCfg.category == "weapon" then
-            -- Equipping is handled by ItemToolService; just notify for now
-            ctx.Remotes.Notify:FireClient(player, {
-                text  = "Equipped " .. (itemCfg.displayName or slot.itemId),
-                color = "yellow",
-            })
+    -- Populate any players already in server (Studio play-solo)
+    for _, player in ipairs(Players:GetPlayers()) do
+        if not vitals[player] then
+            vitals[player] = defaultVitals()
         end
+    end
+
+    -- UseItem: eating food
+    ctx.Remotes.UseItem.OnServerEvent:Connect(function(player, slot)
+        local v = vitals[player]
+        if not v then return end
+        local inv  = ctx.InventoryService
+        local item = inv and inv:getSlot(player, slot)
+        if not item then return end
+        local cfg = ctx.Config.Items[item.id]
+        if not cfg or not cfg.food then return end
+
+        v.hunger = math.min(v.hunger + (cfg.food.hungerRestore or 0), ctx.Config.Vitals.MaxHunger)
+        v.thirst = math.min(v.thirst + (cfg.food.thirstRestore or 0), ctx.Config.Vitals.MaxThirst)
+        if cfg.food.curesPoison then v.poisoned = false end
+        if cfg.food.curesBleeding then v.bleeding = false end
+
+        inv:removeFromSlot(player, slot, 1)
+        broadcast(player)
+        ctx.Remotes.Notify:FireClient(player, {
+            text  = "Ate " .. (cfg.displayName or item.id),
+            color = "green",
+        })
     end)
 
     print("[VitalsService] Initialised")
 end
 
--- ── Public API ────────────────────────────────────────────────────────────
+-- ── Public API (used by other services) ────────────────────────────────────
 
-function VitalsService:adjustTemperature(player, delta)
-    local v = getVitals(player)
-    if not v then return end
-    v.temp = clamp(v.temp + delta, 0, ctx.Config.Vitals.MaxTemperature)
+function VitalsService:get(player)
+    return vitals[player]
 end
 
-function VitalsService:damage(player, amount)
-    local v = getVitals(player)
+function VitalsService:applyDamage(player, amount)
+    local v = vitals[player]
     if not v then return end
-    v.health = clamp(v.health - amount, 0, ctx.Config.Vitals.MaxHealth)
-    applyHumanoidDamage(player, amount)
-    sendVitals(player)
+    v.health = math.max(0, v.health - amount)
+    broadcast(player)
+    -- If health hits 0, damage the Humanoid (triggers death + DeathController)
+    if v.health <= 0 then
+        local char = player.Character
+        local hum  = char and char:FindFirstChildOfClass("Humanoid")
+        if hum and hum.Health > 0 then
+            hum.Health = 0
+        end
+    end
 end
 
--- ── Tick ──────────────────────────────────────────────────────────────────
+function VitalsService:setStatus(player, statusName, value)
+    local v = vitals[player]
+    if not v then return end
+    v[statusName] = value
+    broadcast(player)
+end
+
+-- ── Tick ───────────────────────────────────────────────────────────────────
 
 function VitalsService:tick(dt)
-    local V       = ctx.Config.Vitals
-    local isNight = ctx.WorldService and ctx.WorldService:isNight() or false
-    local decayT  = isNight and V.TempDecayRateNight or V.TempDecayRateDay
-    -- Convert per-minute rates to per-second
-    local dHunger = (V.HungerDecayRate / 60) * dt
-    local dThirst = (V.ThirstDecayRate / 60) * dt
-    local dTemp   = (decayT / 60) * dt
+    tickTimer = tickTimer + dt
+    if tickTimer < TICK_RATE then return end
+    tickTimer = 0
+
+    local V = ctx.Config.Vitals
+    local T = ctx.Config.StatusThresholds
+    local isNight   = ctx.WorldService and ctx.WorldService:isNight()   or false
+    local isRaining = ctx.WorldService and ctx.WorldService:isRaining() or false
 
     for player, v in pairs(vitals) do
-        v.hunger = clamp(v.hunger - dHunger, 0, V.MaxHunger)
-        v.thirst = clamp(v.thirst - dThirst, 0, V.MaxThirst)
-        v.temp   = clamp(v.temp   - dTemp,   0, V.MaxTemperature)
+        if player.Parent then
+            -- Drain hunger & thirst over time
+            v.hunger = math.max(0, v.hunger - V.HungerDecayRate)
+            v.thirst = math.max(0, v.thirst - V.ThirstDecayRate)
 
-        -- Damage from zero vitals
-        if v.hunger == 0 then
-            applyHumanoidDamage(player, (V.StarveDamage / 60) * dt)
-        end
-        if v.thirst == 0 then
-            applyHumanoidDamage(player, (V.DehydrateDamage / 60) * dt)
-        end
-        if v.temp == 0 then
-            applyHumanoidDamage(player, (V.HypothermiaDamage / 60) * dt)
-        end
+            -- Temperature: cold at night or in rain
+            local tempDrain = 0
+            if isNight   then tempDrain = tempDrain + (V.NightTempDrain   or 1) end
+            if isRaining then tempDrain = tempDrain + (V.RainTempDrain    or 2) end
+            v.temp = math.max(0, v.temp - tempDrain)
 
-        -- Throttled network send
-        timers[player] = (timers[player] or 0) + dt
-        if timers[player] >= SEND_INTERVAL then
-            timers[player] = 0
-            sendVitals(player)
+            -- Passive damage from critical states
+            local dmg = 0
+            if v.hunger    < T.StarvingHunger    then dmg = dmg + (V.StarveDamage   or 2) end
+            if v.thirst    < T.DehydratedThirst  then dmg = dmg + (V.DehydrateDamage or 3) end
+            if v.temp      < T.FreezingTemp       then dmg = dmg + (V.FreezeDamage   or 2) end
+            if v.bleeding                         then dmg = dmg + (V.BleedDamage    or 4) end
+            if v.poisoned                         then dmg = dmg + (V.PoisonDamage   or 3) end
+
+            if dmg > 0 then
+                self:applyDamage(player, dmg)
+            else
+                -- Natural health regen when well-fed and warm
+                if v.hunger > T.RestedStamina and v.thirst > T.RestedStamina
+                   and v.temp > T.FreezingTemp * 3 then
+                    v.health = math.min(V.MaxHealth, v.health + (V.HealthRegen or 0.5))
+                end
+                broadcast(player)
+            end
         end
     end
 end
