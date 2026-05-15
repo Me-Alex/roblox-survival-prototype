@@ -1,19 +1,21 @@
--- VitalsService.lua  (Milestone 5)
--- What changed from Milestone 2:
---   • computeStatuses() calculates boolean flags from current vitals.
---   • VitalsUpdate now includes `statuses` table.
---   • Thresholds come from Config.StatusThresholds.
+-- VitalsService.lua  (Milestone 9)
+-- Changes from Milestone 5:
+--   • UseItem handler checks cfg.food.poisonOnDrink:
+--     if true → apply thirstRestore normally BUT set v.poisoned = true
+--     and show a red warning toast.
+--   • Bandage UseItem: cures bleeding (existing).
+--   • Everything else unchanged.
 
 local Players = game:GetService("Players")
 
 local VitalsService = {}
 local ctx
 
-local vitals     = {}   -- vitals[player] = { health, hunger, thirst, temp, stamina, bleeding, poisoned, soaked }
-local tickTimer  = 0
-local TICK_RATE  = 1    -- send update every 1 second
+local vitals    = {}
+local tickTimer = 0
+local TICK_RATE = 1
 
--- ── Defaults ───────────────────────────────────────────────────────────────
+-- ── Defaults ──────────────────────────────────────────────────────────────
 
 local function defaultVitals()
     local V = ctx.Config.Vitals
@@ -29,8 +31,7 @@ local function defaultVitals()
     }
 end
 
--- ── Status flag computation ─────────────────────────────────────────────────
--- Returns a flat table of boolean flags for the HUD.
+-- ── Status flags ──────────────────────────────────────────────────────────
 
 local function computeStatuses(v, isNight, isRaining)
     local T = ctx.Config.StatusThresholds
@@ -46,7 +47,7 @@ local function computeStatuses(v, isNight, isRaining)
     }
 end
 
--- ── Broadcast to one player ─────────────────────────────────────────────────
+-- ── Broadcast ─────────────────────────────────────────────────────────────
 
 local function broadcast(player)
     local v = vitals[player]
@@ -63,7 +64,7 @@ local function broadcast(player)
     })
 end
 
--- ── Init ───────────────────────────────────────────────────────────────────
+-- ── Init ──────────────────────────────────────────────────────────────────
 
 function VitalsService:init(context)
     ctx = context
@@ -77,14 +78,13 @@ function VitalsService:init(context)
         vitals[player] = nil
     end)
 
-    -- Populate any players already in server (Studio play-solo)
     for _, player in ipairs(Players:GetPlayers()) do
         if not vitals[player] then
             vitals[player] = defaultVitals()
         end
     end
 
-    -- UseItem: eating food
+    -- ── UseItem ───────────────────────────────────────────────────────────
     ctx.Remotes.UseItem.OnServerEvent:Connect(function(player, slot)
         local v = vitals[player]
         if not v then return end
@@ -92,25 +92,63 @@ function VitalsService:init(context)
         local item = inv and inv:getSlot(player, slot)
         if not item then return end
         local cfg = ctx.Config.Items[item.id]
-        if not cfg or not cfg.food then return end
+        if not cfg then return end
 
-        v.hunger = math.min(v.hunger + (cfg.food.hungerRestore or 0), ctx.Config.Vitals.MaxHunger)
-        v.thirst = math.min(v.thirst + (cfg.food.thirstRestore or 0), ctx.Config.Vitals.MaxThirst)
-        if cfg.food.curesPoison then v.poisoned = false end
-        if cfg.food.curesBleeding then v.bleeding = false end
+        -- ── Food / drink ──────────────────────────────────────────────────
+        if cfg.food then
+            local f = cfg.food
 
-        inv:removeFromSlot(player, slot, 1)
-        broadcast(player)
-        ctx.Remotes.Notify:FireClient(player, {
-            text  = "Ate " .. (cfg.displayName or item.id),
-            color = "green",
-        })
+            -- Apply nutrition
+            v.hunger = math.min(v.hunger + (f.hungerRestore or 0), ctx.Config.Vitals.MaxHunger)
+            v.thirst = math.min(v.thirst + (f.thirstRestore or 0), ctx.Config.Vitals.MaxThirst)
+
+            -- Dirty water penalty: restore thirst but apply poison
+            if f.poisonOnDrink then
+                v.poisoned = true
+                ctx.Remotes.Notify:FireClient(player, {
+                    text  = "☠ The dirty water makes you sick! Boil water next time.",
+                    color = "red",
+                })
+            else
+                -- Show a positive toast only for non-poison food
+                ctx.Remotes.Notify:FireClient(player, {
+                    text  = "Ate " .. (cfg.displayName or item.id),
+                    color = "green",
+                })
+            end
+
+            if f.curesPoison   then v.poisoned  = false end
+            if f.curesBleeding then v.bleeding  = false end
+
+            inv:removeFromSlot(player, slot, 1)
+            broadcast(player)
+            return
+        end
+
+        -- ── Bandage (tool with curesBleeding) ─────────────────────────────
+        if cfg.onUse == "curesBleeding" then
+            if v.bleeding then
+                v.bleeding = false
+                inv:removeFromSlot(player, slot, 1)
+                broadcast(player)
+                ctx.Remotes.Notify:FireClient(player, {
+                    text  = "Bleeding stopped.",
+                    color = "green",
+                })
+            else
+                ctx.Remotes.Notify:FireClient(player, {
+                    text  = "You are not bleeding.",
+                    color = "yellow",
+                })
+            end
+            return
+        end
     end)
 
     print("[VitalsService] Initialised")
 end
 
--- ── Public API (used by other services) ────────────────────────────────────
+-- ── Public API ────────────────────────────────────────────────────────────
 
 function VitalsService:get(player)
     return vitals[player]
@@ -121,13 +159,10 @@ function VitalsService:applyDamage(player, amount)
     if not v then return end
     v.health = math.max(0, v.health - amount)
     broadcast(player)
-    -- If health hits 0, damage the Humanoid (triggers death + DeathController)
     if v.health <= 0 then
         local char = player.Character
         local hum  = char and char:FindFirstChildOfClass("Humanoid")
-        if hum and hum.Health > 0 then
-            hum.Health = 0
-        end
+        if hum and hum.Health > 0 then hum.Health = 0 end
     end
 end
 
@@ -138,7 +173,7 @@ function VitalsService:setStatus(player, statusName, value)
     broadcast(player)
 end
 
--- ── Tick ───────────────────────────────────────────────────────────────────
+-- ── Tick ──────────────────────────────────────────────────────────────────
 
 function VitalsService:tick(dt)
     tickTimer = tickTimer + dt
@@ -152,28 +187,24 @@ function VitalsService:tick(dt)
 
     for player, v in pairs(vitals) do
         if player.Parent then
-            -- Drain hunger & thirst over time
             v.hunger = math.max(0, v.hunger - V.HungerDecayRate)
             v.thirst = math.max(0, v.thirst - V.ThirstDecayRate)
 
-            -- Temperature: cold at night or in rain
             local tempDrain = 0
-            if isNight   then tempDrain = tempDrain + (V.NightTempDrain   or 1) end
-            if isRaining then tempDrain = tempDrain + (V.RainTempDrain    or 2) end
+            if isNight   then tempDrain = tempDrain + (V.NightTempDrain or 1) end
+            if isRaining then tempDrain = tempDrain + (V.RainTempDrain  or 2) end
             v.temp = math.max(0, v.temp - tempDrain)
 
-            -- Passive damage from critical states
             local dmg = 0
-            if v.hunger    < T.StarvingHunger    then dmg = dmg + (V.StarveDamage   or 2) end
-            if v.thirst    < T.DehydratedThirst  then dmg = dmg + (V.DehydrateDamage or 3) end
-            if v.temp      < T.FreezingTemp       then dmg = dmg + (V.FreezeDamage   or 2) end
-            if v.bleeding                         then dmg = dmg + (V.BleedDamage    or 4) end
-            if v.poisoned                         then dmg = dmg + (V.PoisonDamage   or 3) end
+            if v.hunger   < T.StarvingHunger   then dmg = dmg + (V.StarveDamage    or 2) end
+            if v.thirst   < T.DehydratedThirst then dmg = dmg + (V.DehydrateDamage or 3) end
+            if v.temp     < T.FreezingTemp      then dmg = dmg + (V.FreezeDamage    or 2) end
+            if v.bleeding                       then dmg = dmg + (V.BleedDamage     or 4) end
+            if v.poisoned                       then dmg = dmg + (V.PoisonDamage    or 3) end
 
             if dmg > 0 then
                 self:applyDamage(player, dmg)
             else
-                -- Natural health regen when well-fed and warm
                 if v.hunger > T.RestedStamina and v.thirst > T.RestedStamina
                    and v.temp > T.FreezingTemp * 3 then
                     v.health = math.min(V.MaxHealth, v.health + (V.HealthRegen or 0.5))
