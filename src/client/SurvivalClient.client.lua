@@ -1852,6 +1852,7 @@ local function triggerEquipAnimation(itemId)
 	itemAnim.EquippedItemId = itemId
 	itemAnim.EquipTime = 0
 	itemAnim.EquipPulse = 1
+	attachItemViewModel(itemId)
 end
 
 local function triggerAttackAnimation()
@@ -1878,10 +1879,70 @@ local function triggerHitPulse(isCrit)
 	end
 end
 
+local itemViewModel = {
+	model = nil,
+	toolId = nil,
+	baseCFrame = CFrame.new(0.7, -0.9, -1.35),
+	animTime = 0,
+}
+
+local function getItemViewModelTemplate(itemId)
+	local container = ReplicatedStorage:FindFirstChild("ItemViewModels")
+	if not container then
+		return nil
+	end
+
+	return container:FindFirstChild(itemId) or container:FindFirstChild("Default")
+end
+
+local function clearItemViewModel()
+	if itemViewModel.model then
+		itemViewModel.model:Destroy()
+		itemViewModel.model = nil
+		itemViewModel.toolId = nil
+		itemViewModel.animTime = 0
+	end
+end
+
+local function attachItemViewModel(itemId)
+	local template = getItemViewModelTemplate(itemId)
+	if not template or not workspace.CurrentCamera then
+		return
+	end
+
+	clearItemViewModel()
+	local clone = template:Clone()
+	clone.Name = "ClientItemViewModel"
+	clone.Parent = workspace.CurrentCamera
+	itemViewModel.model = clone
+	itemViewModel.toolId = itemId
+	itemViewModel.animTime = 0
+	itemAnim.EquipPulse = 1
+	attachItemViewModel(itemId)
+end
+
+local function updateItemViewModel(deltaTime)
+	if not itemViewModel.model or not workspace.CurrentCamera then
+		return
+	end
+
+	itemViewModel.animTime += deltaTime
+	local cam = workspace.CurrentCamera
+	local bob = math.sin(itemViewModel.animTime * 8.5) * 0.02
+	local sway = math.cos(itemViewModel.animTime * 6.5) * 0.015
+	local attack = itemAnim.SwingPulse * 0.05
+	local harvest = itemAnim.HarvestPulse * 0.04
+	local hit = itemAnim.HitPulse * 0.03
+	itemViewModel.model:PivotTo(cam.CFrame * itemViewModel.baseCFrame * CFrame.new(sway, bob - attack - harvest - hit, 0) * CFrame.Angles(itemAnim.Pitch * 0.35, -itemAnim.Roll * 0.5, 0))
+end
+
 local function updateItemAnimation(deltaTime)
 	local equipped = getEquippedHeldItemId()
 	if equipped ~= itemAnim.EquippedItemId then
 		triggerEquipAnimation(equipped)
+		if not equipped then
+			clearItemViewModel()
+		end
 	end
 
 	itemAnim.BobPhase += deltaTime * ITEM_ANIM.BobSpeed
@@ -2459,6 +2520,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
 	updateSprint(deltaTime)
 	updateSwimming(deltaTime)
 	updateItemAnimation(deltaTime)
+	updateItemViewModel(deltaTime)
 end)
 
 task.spawn(function()
