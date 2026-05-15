@@ -10,7 +10,7 @@ local EnemyService = {}
 local context
 local enemiesFolder
 local random = Random.new(Config.World.Seed + 91)
-local activeEnemies = {}
+local activeEnemies = {} -- [model] = enemyTypeId (string)
 local lastAttackByEnemy = {}
 local threat = Config.Threat.BaseThreat
 local lastRaidAt = 0
@@ -93,6 +93,7 @@ local function createNightStalker(position)
 	model.Name = "NightStalker"
 	model:SetAttribute("Health", enemyConfig.Health)
 	model:SetAttribute("MaxHealth", enemyConfig.Health)
+	model:SetAttribute("EnemyType", "NightStalker")
 
 	local root = createPart(
 		"Root",
@@ -111,6 +112,8 @@ local function createNightStalker(position)
 		Enum.Material.SmoothPlastic,
 		model
 	)
+	-- Silence unused variable warning in strict mode.
+	_ = head
 
 	for x = -1, 1, 2 do
 		local eye = createPart(
@@ -126,22 +129,80 @@ local function createNightStalker(position)
 
 	model.PrimaryPart = root
 	model.Parent = enemiesFolder
-	activeEnemies[model] = true
+	activeEnemies[model] = "NightStalker"
 	lastAttackByEnemy[model] = 0
 
 	return model
 end
 
+-- FrostCrawler: a new, faster enemy that spawns during cold-weather nights
+-- and has a chance to apply the Soaked (chilling) status on hit.
+local function createFrostCrawler(position)
+	local enemyConfig = Config.Enemies.FrostCrawler
+	local model = Instance.new("Model")
+	model.Name = "FrostCrawler"
+	model:SetAttribute("Health", enemyConfig.Health)
+	model:SetAttribute("MaxHealth", enemyConfig.Health)
+	model:SetAttribute("EnemyType", "FrostCrawler")
+
+	-- Low, flat body — pale blue-grey
+	local root = createPart(
+		"Root",
+		Vector3.new(4, 1.8, 4),
+		CFrame.new(position),
+		Color3.fromRGB(148, 176, 196),
+		Enum.Material.Ice,
+		model
+	)
+
+	-- Small raised head
+	local headPart = createPart(
+		"Head",
+		Vector3.new(2, 1.4, 2),
+		CFrame.new(position + Vector3.new(0, 1.6, 0)),
+		Color3.fromRGB(110, 140, 160),
+		Enum.Material.SmoothPlastic,
+		model
+	)
+	_ = headPart
+
+	-- Icy cyan eyes
+	for x = -1, 1, 2 do
+		local eye = createPart(
+			"Eye",
+			Vector3.new(0.3, 0.3, 0.3),
+			CFrame.new(position + Vector3.new(x * 0.45, 1.8, -0.9)),
+			Color3.fromRGB(100, 220, 255),
+			Enum.Material.Neon,
+			model
+		)
+		eye.CanQuery = false
+	end
+
+	model.PrimaryPart = root
+	model.Parent = enemiesFolder
+	activeEnemies[model] = "FrostCrawler"
+	lastAttackByEnemy[model] = 0
+
+	return model
+end
+
+-- Safe enemy count: prunes dead references while counting.
 local function countActiveEnemies()
 	local count = 0
+	local dead = {}
 
 	for enemy in pairs(activeEnemies) do
 		if enemy.Parent then
 			count += 1
 		else
-			activeEnemies[enemy] = nil
-			lastAttackByEnemy[enemy] = nil
+			table.insert(dead, enemy)
 		end
+	end
+
+	for _, enemy in ipairs(dead) do
+		activeEnemies[enemy] = nil
+		lastAttackByEnemy[enemy] = nil
 	end
 
 	return count
@@ -191,15 +252,21 @@ local function getEffectiveThreat()
 	return math.clamp(threat + beaconBonus, Config.Threat.BaseThreat, Config.Threat.MaxThreat)
 end
 
+-- Enemies move faster when threat is high (up to +40% at max threat).
+local function getScaledSpeed(baseSpeed)
+	local threatFraction = getEffectiveThreat() / Config.Threat.MaxThreat
+	return baseSpeed * (1 + threatFraction * 0.4)
+end
+
 local function getDamageForPlayer(player, baseDamage)
-	local damage = baseDamage
+	local dmg = baseDamage
 	local armorId = context.InventoryService and context.InventoryService.getEquippedItem(player, "Armor") or nil
 
 	if armorId and Config.Combat.Armor[armorId] then
-		damage *= Config.Combat.Armor[armorId].DamageMultiplier
+		dmg *= Config.Combat.Armor[armorId].DamageMultiplier
 	end
 
-	return damage
+	return dmg
 end
 
 local function triggerSpikeTraps(enemy, position)
@@ -245,6 +312,7 @@ end
 
 local function moveEnemy(enemy, deltaTime)
 	if not enemy.Parent or not enemy.PrimaryPart then
+		-- Already destroyed; prune safely.
 		activeEnemies[enemy] = nil
 		lastAttackByEnemy[enemy] = nil
 		return
@@ -257,7 +325,8 @@ local function moveEnemy(enemy, deltaTime)
 		return
 	end
 
-	local enemyConfig = Config.Enemies.NightStalker
+	local typeId = activeEnemies[enemy] or "NightStalker"
+	local enemyConfig = Config.Enemies[typeId] or Config.Enemies.NightStalker
 	local position = enemy:GetPivot().Position
 	local targetPlayer, distance = getNearestPlayer(position, enemyConfig.AggroRange)
 
@@ -274,7 +343,8 @@ local function moveEnemy(enemy, deltaTime)
 	local direction = targetPosition - Vector3.new(position.X, 2, position.Z)
 
 	if direction.Magnitude > 0.1 then
-		local step = math.min(enemyConfig.MoveSpeed * deltaTime, direction.Magnitude)
+		local scaledSpeed = getScaledSpeed(enemyConfig.MoveSpeed)
+		local step = math.min(scaledSpeed * deltaTime, direction.Magnitude)
 		local nextPosition = Vector3.new(position.X, 2, position.Z) + direction.Unit * step
 		enemy:PivotTo(CFrame.new(nextPosition, targetPosition))
 		triggerSpikeTraps(enemy, nextPosition)
@@ -298,8 +368,14 @@ local function moveEnemy(enemy, deltaTime)
 					context.InventoryService.damageEquippedArmor(targetPlayer, 2)
 				end
 
-				if context.VitalsService and random:NextNumber() <= (enemyConfig.BleedChance or 0) then
+				-- NightStalker: chance to apply Bleeding
+				if context.VitalsService and typeId == "NightStalker" and random:NextNumber() <= (enemyConfig.BleedChance or 0) then
 					context.VitalsService.applyStatus(targetPlayer, "Bleeding")
+				end
+
+				-- FrostCrawler: chance to apply Soaked (chilling the player)
+				if context.VitalsService and typeId == "FrostCrawler" and random:NextNumber() <= (enemyConfig.ChillChance or 0) then
+					context.VitalsService.applyStatus(targetPlayer, "Soaked")
 				end
 			end
 		end
@@ -356,6 +432,7 @@ function EnemyService.damageEnemy(player, enemy, amount)
 		return false, "No enemy hit."
 	end
 
+	local typeId = activeEnemies[enemy] or "NightStalker"
 	local health = enemy:GetAttribute("Health") or 0
 	health -= amount
 	enemy:SetAttribute("Health", health)
@@ -366,7 +443,8 @@ function EnemyService.damageEnemy(player, enemy, amount)
 		enemy:Destroy()
 
 		if player then
-			grantDrops(player, Config.Enemies.NightStalker)
+			local cfg = Config.Enemies[typeId] or Config.Enemies.NightStalker
+			grantDrops(player, cfg)
 
 			if context.ObjectiveService then
 				context.ObjectiveService.recordEnemyDefeated(player)
@@ -377,10 +455,10 @@ function EnemyService.damageEnemy(player, enemy, amount)
 			end
 		end
 
-		return true, "Defeated Night Stalker."
+		return true, string.format("Defeated %s.", typeId)
 	end
 
-	return true, string.format("Hit Night Stalker for %d.", amount)
+	return true, string.format("Hit %s for %d.", typeId, amount)
 end
 
 function EnemyService.init(newContext)
@@ -394,6 +472,7 @@ function EnemyService.init(newContext)
 	enemiesFolder.Name = "Enemies"
 	enemiesFolder.Parent = worldFolder
 
+	-- NightStalker regular spawn loop
 	task.spawn(function()
 		while true do
 			local enemyConfig = Config.Enemies.NightStalker
@@ -415,6 +494,35 @@ function EnemyService.init(newContext)
 		end
 	end)
 
+	-- FrostCrawler spawn loop — only during cold weather nights
+	task.spawn(function()
+		while true do
+			local crawlerConfig = Config.Enemies.FrostCrawler
+			task.wait(crawlerConfig.SpawnEverySeconds)
+
+			if not context.WorldService.isNight() then
+				continue
+			end
+
+			local weatherId = context.WorldService.getCurrentWeatherId()
+			if weatherId ~= "ColdFront" and weatherId ~= "Storm" then
+				continue
+			end
+
+			if countActiveEnemies() >= crawlerConfig.MaxAlive + Config.Enemies.NightStalker.MaxAlive then
+				continue
+			end
+
+			local players = Players:GetPlayers()
+			if #players > 0 then
+				local target = players[random:NextInteger(1, #players)]
+				createFrostCrawler(randomSpawnPositionAround(target))
+				Remotes.get("Notification"):FireAllClients("Something cold is crawling through the dark.")
+			end
+		end
+	end)
+
+	-- Threat tick + raid check
 	task.spawn(function()
 		while true do
 			task.wait(10)
@@ -446,11 +554,17 @@ function EnemyService.init(newContext)
 		end
 	end)
 
+	-- Movement loop
 	task.spawn(function()
 		while true do
 			local deltaTime = 0.25
-
+			-- Snapshot keys to avoid modifying the table during iteration.
+			local snapshot = {}
 			for enemy in pairs(activeEnemies) do
+				table.insert(snapshot, enemy)
+			end
+
+			for _, enemy in ipairs(snapshot) do
 				moveEnemy(enemy, deltaTime)
 			end
 
