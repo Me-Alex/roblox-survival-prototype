@@ -10,6 +10,10 @@ local vitalsByPlayer = {}
 local context
 local random = Random.new(Config.World.Seed + 211)
 
+-- How often (in ticks) we remind the player they are freezing / overheating.
+local TEMP_WARN_INTERVAL_TICKS = 4
+local tempWarnCounters = {}
+
 local function markDirty(player)
 	if context and context.PersistenceService then
 		context.PersistenceService.markPlayerDirty(player)
@@ -214,6 +218,9 @@ function VitalsService.applySnapshot(player, snapshot)
 end
 
 local function updateStatuses(player, vitals)
+	-- Build a list of statuses to expire so we never mutate the table mid-loop.
+	local toRemove = {}
+
 	for statusId, statusState in pairs(vitals.Statuses) do
 		local statusConfig = Config.StatusEffects[statusId]
 		if statusConfig then
@@ -251,10 +258,43 @@ local function updateStatuses(player, vitals)
 			end
 
 			if statusState.Remaining <= 0 then
-				vitals.Statuses[statusId] = nil
+				table.insert(toRemove, statusId)
 			end
 		else
-			vitals.Statuses[statusId] = nil
+			table.insert(toRemove, statusId)
+		end
+	end
+
+	for _, statusId in ipairs(toRemove) do
+		vitals.Statuses[statusId] = nil
+	end
+end
+
+-- Check if a player's character stamina is below the Exhausted threshold.
+-- This reads the "Stamina" attribute that the client movement system writes,
+-- or falls back gracefully if it hasn't been set yet.
+local function checkExhaustion(player, vitals)
+	local character = player.Character
+	if not character then
+		return
+	end
+
+	local stamina = character:GetAttribute("Stamina")
+	if type(stamina) ~= "number" then
+		return
+	end
+
+	local exhaustedThreshold = Config.Movement and Config.Movement.ExhaustedThreshold or 10
+
+	if stamina <= exhaustedThreshold then
+		-- Apply Exhausted status only if not already active.
+		if not vitals.Statuses["Exhausted"] then
+			VitalsService.applyStatus(player, "Exhausted", Config.StatusEffects.Exhausted and Config.StatusEffects.Exhausted.DurationSeconds or 12)
+		end
+	else
+		-- Remove the Exhausted status once stamina recovers.
+		if vitals.Statuses["Exhausted"] then
+			vitals.Statuses["Exhausted"] = nil
 		end
 	end
 end
@@ -289,11 +329,29 @@ local function updatePlayer(player)
 		damage(player, Config.Vitals.DehydratedDamage)
 	end
 
+	-- Temperature danger with periodic reminders so the player knows what is killing them.
+	local counter = tempWarnCounters[player] or 0
+	tempWarnCounters[player] = counter + 1
+
 	if vitals.Temperature <= Config.Vitals.ColdThreshold then
 		damage(player, Config.Vitals.ColdDamage)
+		if tempWarnCounters[player] >= TEMP_WARN_INTERVAL_TICKS then
+			tempWarnCounters[player] = 0
+			Remotes.get("Notification"):FireClient(player, "You are freezing! Find warmth.")
+		end
 	elseif vitals.Temperature >= Config.Vitals.HotThreshold then
 		damage(player, Config.Vitals.HeatDamage)
+		if tempWarnCounters[player] >= TEMP_WARN_INTERVAL_TICKS then
+			tempWarnCounters[player] = 0
+			Remotes.get("Notification"):FireClient(player, "You are overheating! Find shade or water.")
+		end
+	else
+		-- Reset counter when temperature is safe so warnings restart promptly.
+		tempWarnCounters[player] = 0
 	end
+
+	-- Exhaustion check: applies the Exhausted status when stamina is depleted.
+	checkExhaustion(player, vitals)
 
 	updateStatuses(player, vitals)
 	vitals.Health = getHealthPercent(player)
@@ -306,8 +364,12 @@ function VitalsService.init(newContext)
 
 	task.spawn(function()
 		while true do
-			for _, player in ipairs(Players:GetPlayers()) do
-				updatePlayer(player)
+			-- Snapshot players list to avoid issues if a player leaves mid-loop.
+			local players = Players:GetPlayers()
+			for _, player in ipairs(players) do
+				if player.Parent then
+					updatePlayer(player)
+				end
 			end
 
 			task.wait(Config.Vitals.TickSeconds)
@@ -318,6 +380,7 @@ end
 function VitalsService.playerAdded(player)
 	ensureVitals(player)
 	sendVitals(player)
+	tempWarnCounters[player] = 0
 
 	player.CharacterAdded:Connect(function()
 		task.defer(function()
@@ -341,6 +404,7 @@ end
 
 function VitalsService.playerRemoving(player)
 	vitalsByPlayer[player] = nil
+	tempWarnCounters[player] = nil
 end
 
 return VitalsService
