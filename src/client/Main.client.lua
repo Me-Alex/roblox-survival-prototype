@@ -1,36 +1,31 @@
--- Main.client.lua
--- Client entry point. Loads all controllers.
+-- Main.client.lua  (Milestone 3)
+-- Client entry point. Loads all controllers and wires them with a shared context.
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players           = game:GetService("Players")
-local RunService        = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+player:WaitForChild("PlayerGui")
 
 local Shared  = ReplicatedStorage:WaitForChild("Shared")
 local Config  = require(Shared:WaitForChild("Config"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 
-local ClientScript = script.Parent
-local CtrlFolder   = ClientScript:WaitForChild("Controllers")
-
-local HudController       = require(CtrlFolder:WaitForChild("HudController"))
-local InventoryController = require(CtrlFolder:WaitForChild("InventoryController"))
+local Controllers = script.Parent:WaitForChild("Controllers")
+local HudController       = require(Controllers:WaitForChild("HudController"))
+local InventoryController = require(Controllers:WaitForChild("InventoryController"))
+local CraftingController  = require(Controllers:WaitForChild("CraftingController"))
 
 local ctx = {
     Config  = Config,
     Remotes = Remotes,
-    Player  = Players.LocalPlayer,
     HudController       = HudController,
     InventoryController = InventoryController,
+    CraftingController  = CraftingController,
 }
 
 HudController:init(ctx)
 InventoryController:init(ctx)
+CraftingController:init(ctx)
 
-print("[Client] All controllers initialised")
-
-local controllers = { HudController, InventoryController }
-RunService.Heartbeat:Connect(function(dt)
-    for _, ctrl in ipairs(controllers) do
-        if ctrl.tick then ctrl:tick(dt) end
-    end
-end)
+print("[Client] All controllers initialised.")
