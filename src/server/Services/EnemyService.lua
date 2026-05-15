@@ -461,6 +461,272 @@ function EnemyService.damageEnemy(player, enemy, amount)
 	return true, string.format("Hit %s for %d.", typeId, amount)
 end
 
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- PASSIVE WILDLIFE (Rabbit / Deer)
+-- ─────────────────────────────────────────────────────────────────────────────
+
+local activeWildlife = {}
+
+local function randomPointNear(center, radius)
+	local angle = random:NextNumber(0, math.pi * 2)
+	local dist = random:NextNumber(radius * 0.3, radius)
+	local half = Config.World.SpawnAreaHalfSize
+	return Vector3.new(
+		math.clamp(center.X + math.cos(angle) * dist, -half, half),
+		2,
+		math.clamp(center.Z + math.sin(angle) * dist, -half, half)
+	)
+end
+
+local function createRabbit(position)
+	local cfg = Config.Wildlife.Rabbit
+	local model = Instance.new("Model")
+	model.Name = "Rabbit"
+	model:SetAttribute("Health", cfg.Health)
+	model:SetAttribute("MaxHealth", cfg.Health)
+	model:SetAttribute("WildlifeType", "Rabbit")
+
+	local body = createPart("Root", Vector3.new(1.1, 0.7, 1.6), CFrame.new(position),
+		Color3.fromRGB(200, 185, 165), Enum.Material.SmoothPlastic, model)
+	local head = createPart("Head", Vector3.new(0.7, 0.65, 0.65),
+		CFrame.new(position + Vector3.new(0, 0.55, -0.65)),
+		Color3.fromRGB(200, 185, 165), Enum.Material.SmoothPlastic, model)
+	_ = head
+	for x = -1, 1, 2 do
+		local ear = createPart("Ear", Vector3.new(0.18, 0.55, 0.18),
+			CFrame.new(position + Vector3.new(x * 0.22, 1.15, -0.65)),
+			Color3.fromRGB(230, 200, 190), Enum.Material.SmoothPlastic, model)
+		ear.CanQuery = false
+	end
+	for x = -1, 1, 2 do
+		local eye = createPart("Eye", Vector3.new(0.1, 0.1, 0.1),
+			CFrame.new(position + Vector3.new(x * 0.22, 0.65, -0.95)),
+			Color3.fromRGB(30, 12, 12), Enum.Material.Neon, model)
+		eye.CanQuery = false
+	end
+
+	model.PrimaryPart = body
+	model.Parent = enemiesFolder
+	activeWildlife[model] = {
+		typeId = "Rabbit",
+		state = "Wander",
+		fleeTimer = 0,
+		homePos = position,
+		nextWanderAt = 0,
+		targetPos = position,
+	}
+	return model
+end
+
+local function createDeer(position)
+	local cfg = Config.Wildlife.Deer
+	local model = Instance.new("Model")
+	model.Name = "Deer"
+	model:SetAttribute("Health", cfg.Health)
+	model:SetAttribute("MaxHealth", cfg.Health)
+	model:SetAttribute("WildlifeType", "Deer")
+
+	local body = createPart("Root", Vector3.new(2.2, 1.7, 3.6), CFrame.new(position),
+		Color3.fromRGB(162, 116, 72), Enum.Material.SmoothPlastic, model)
+	local neck = createPart("Neck", Vector3.new(0.65, 1.2, 0.65),
+		CFrame.new(position + Vector3.new(0, 1.7, -1.0)),
+		Color3.fromRGB(162, 116, 72), Enum.Material.SmoothPlastic, model)
+	_ = neck
+	local head = createPart("Head", Vector3.new(0.95, 0.85, 1.1),
+		CFrame.new(position + Vector3.new(0, 2.4, -1.35)),
+		Color3.fromRGB(150, 104, 60), Enum.Material.SmoothPlastic, model)
+	_ = head
+	for x = -1, 1, 2 do
+		local antler = createPart("Antler", Vector3.new(0.18, 0.7, 0.18),
+			CFrame.new(position + Vector3.new(x * 0.38, 3.0, -1.35)),
+			Color3.fromRGB(120, 85, 45), Enum.Material.Wood, model)
+		antler.CanQuery = false
+	end
+	for x = -1, 1, 2 do
+		local eye = createPart("Eye", Vector3.new(0.14, 0.14, 0.14),
+			CFrame.new(position + Vector3.new(x * 0.38, 2.45, -1.8)),
+			Color3.fromRGB(20, 10, 5), Enum.Material.Neon, model)
+		eye.CanQuery = false
+	end
+
+	model.PrimaryPart = body
+	model.Parent = enemiesFolder
+	activeWildlife[model] = {
+		typeId = "Deer",
+		state = "Wander",
+		fleeTimer = 0,
+		homePos = position,
+		nextWanderAt = 0,
+		targetPos = position,
+	}
+	return model
+end
+
+local function countWildlifeOfType(typeId)
+	local count = 0
+	local dead = {}
+	for model, data in pairs(activeWildlife) do
+		if model.Parent then
+			if data.typeId == typeId then count += 1 end
+		else
+			table.insert(dead, model)
+		end
+	end
+	for _, m in ipairs(dead) do activeWildlife[m] = nil end
+	return count
+end
+
+local function regionCenter(regionId)
+	for _, region in ipairs(Config.Regions) do
+		if region.Id == regionId then
+			return region.Center
+		end
+	end
+	return Vector3.new(0, 2, 0)
+end
+
+local function spawnWildlifeForType(typeId)
+	local cfg = Config.Wildlife[typeId]
+	if not cfg then return end
+	if countWildlifeOfType(typeId) >= cfg.MaxAlive then return end
+
+	local spawnRegions = cfg.SpawnRegions
+	local chosenId = spawnRegions[random:NextInteger(1, #spawnRegions)]
+	local center = regionCenter(chosenId)
+	local angle = random:NextNumber(0, math.pi * 2)
+	local dist = random:NextNumber(20, 80)
+	local half = Config.World.SpawnAreaHalfSize
+	local pos = Vector3.new(
+		math.clamp(center.X + math.cos(angle) * dist, -half, half),
+		2,
+		math.clamp(center.Z + math.sin(angle) * dist, -half, half)
+	)
+
+	if typeId == "Rabbit" then
+		createRabbit(pos)
+	elseif typeId == "Deer" then
+		createDeer(pos)
+	end
+end
+
+local function grantWildlifeDrops(player, cfg)
+	if not player then return end
+	for itemId, drop in pairs(cfg.Drop) do
+		local amount = random:NextInteger(drop.Min, drop.Max)
+		if amount > 0 then
+			context.InventoryService.addItem(player, itemId, amount)
+			local displayName = Config.Items[itemId] and Config.Items[itemId].DisplayName or itemId
+			Remotes.get("Notification"):FireClient(player, string.format("+%d %s", amount, displayName))
+		end
+	end
+end
+
+local function moveWildlife(deltaTime)
+	local now = os.clock()
+	local snapshot = {}
+	for model in pairs(activeWildlife) do
+		table.insert(snapshot, model)
+	end
+
+	for _, model in ipairs(snapshot) do
+		local data = activeWildlife[model]
+		if not data or not model.Parent or not model.PrimaryPart then
+			activeWildlife[model] = nil
+			continue
+		end
+
+		local cfg = Config.Wildlife[data.typeId]
+		if not cfg then continue end
+
+		local pos = model:GetPivot().Position
+		local flatPos = Vector3.new(pos.X, 2, pos.Z)
+
+		local nearestPlayer, nearestDist = getNearestPlayer(flatPos, cfg.FleeRange)
+
+		if nearestPlayer and nearestDist < cfg.FleeRange then
+			data.state = "Flee"
+			data.fleeTimer = cfg.FleeDurationSeconds
+
+			local playerRoot = getRoot(nearestPlayer)
+			if playerRoot then
+				local awayDir = (flatPos - Vector3.new(playerRoot.Position.X, 2, playerRoot.Position.Z))
+				if awayDir.Magnitude > 0.1 then
+					local half = Config.World.SpawnAreaHalfSize
+					local fleeTarget = flatPos + awayDir.Unit * cfg.FleeSpeed * 2
+					data.targetPos = Vector3.new(
+						math.clamp(fleeTarget.X, -half, half),
+						2,
+						math.clamp(fleeTarget.Z, -half, half)
+					)
+				end
+			end
+		else
+			if data.state == "Flee" then
+				data.fleeTimer -= deltaTime
+				if data.fleeTimer <= 0 then
+					data.state = "Wander"
+				end
+			end
+		end
+
+		if data.state == "Wander" and now >= data.nextWanderAt then
+			data.targetPos = randomPointNear(data.homePos, cfg.WanderRadius)
+			data.nextWanderAt = now + cfg.WanderIntervalSeconds + random:NextNumber(-1, 2)
+		end
+
+		local speed = data.state == "Flee" and cfg.FleeSpeed or cfg.MoveSpeed
+		local direction = data.targetPos - flatPos
+
+		if direction.Magnitude > 0.5 then
+			local step = math.min(speed * deltaTime, direction.Magnitude)
+			local nextPos = flatPos + direction.Unit * step
+			local lookAt = nextPos + direction.Unit
+			model:PivotTo(CFrame.new(nextPos, lookAt))
+		end
+	end
+end
+
+local function startWildlifeSpawnLoop(typeId)
+	local cfg = Config.Wildlife[typeId]
+	task.spawn(function()
+		while true do
+			task.wait(cfg.SpawnEverySeconds)
+			spawnWildlifeForType(typeId)
+		end
+	end)
+end
+
+
+function EnemyService.damageWildlife(player, model, amount)
+	local data = activeWildlife[model]
+	if not data or not model.Parent then
+		return false, "Not wildlife."
+	end
+
+	local health = (model:GetAttribute("Health") or 0) - amount
+	model:SetAttribute("Health", health)
+
+	if health <= 0 then
+		activeWildlife[model] = nil
+		model:Destroy()
+		if player then
+			local cfg = Config.Wildlife[data.typeId]
+			if cfg then grantWildlifeDrops(player, cfg) end
+			if context.ProgressionService then
+				context.ProgressionService.addXP(player, Config.Progression.XP.EnemyDefeat or 10, "hunted animal")
+			end
+		end
+		return true, "Animal defeated."
+	end
+
+	return true, string.format("Hit %s for %d.", data.typeId, amount)
+end
+
+function EnemyService.getActiveWildlife()
+	return activeWildlife
+end
+
 function EnemyService.init(newContext)
 	context = newContext
 
@@ -571,6 +837,19 @@ function EnemyService.init(newContext)
 			task.wait(deltaTime)
 		end
 	end)
-end
 
+	-- Wildlife spawn loops
+	startWildlifeSpawnLoop("Rabbit")
+	startWildlifeSpawnLoop("Deer")
+
+	-- Wildlife movement loop
+	task.spawn(function()
+		while true do
+			local deltaTime = 0.25
+			moveWildlife(deltaTime)
+			task.wait(deltaTime)
+		end
+	end)
+
+end
 return EnemyService
