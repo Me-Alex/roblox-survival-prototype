@@ -1931,6 +1931,14 @@ local TOOL_ANIMATION_IDS = {
 	IronSpear = { Equip = 0, Swing = 0 },
 }
 
+local TOOL_ANIMATION_PROFILES = {
+	StoneAxe = { ViewOffset = CFrame.new(0.72, -0.94, -1.35), Bob = 0.02, Sway = 0.012, SwingY = -0.06 },
+	Pickaxe = { ViewOffset = CFrame.new(0.76, -0.98, -1.38), Bob = 0.018, Sway = 0.01, SwingY = -0.07 },
+	Spear = { ViewOffset = CFrame.new(0.63, -0.88, -1.28), Bob = 0.022, Sway = 0.015, SwingY = -0.04 },
+	IronSpear = { ViewOffset = CFrame.new(0.64, -0.88, -1.28), Bob = 0.022, Sway = 0.015, SwingY = -0.045 },
+	Default = { ViewOffset = CFrame.new(0.7, -0.92, -1.34), Bob = 0.016, Sway = 0.01, SwingY = -0.05 },
+}
+
 local function getAnimator()
 	local character = player.Character
 	if not character then
@@ -1986,12 +1994,13 @@ local function updateItemViewModel(deltaTime)
 
 	itemViewModel.animTime += deltaTime
 	local cam = workspace.CurrentCamera
-	local bob = math.sin(itemViewModel.animTime * 8.5) * 0.02
-	local sway = math.cos(itemViewModel.animTime * 6.5) * 0.015
+	local profile = TOOL_ANIMATION_PROFILES[itemViewModel.toolId] or TOOL_ANIMATION_PROFILES.Default
+	local bob = math.sin(itemViewModel.animTime * 8.5) * profile.Bob
+	local sway = math.cos(itemViewModel.animTime * 6.5) * profile.Sway
 	local attack = itemAnim.SwingPulse * 0.05
 	local harvest = itemAnim.HarvestPulse * 0.04
 	local hit = itemAnim.HitPulse * 0.03
-	itemViewModel.model:PivotTo(cam.CFrame * itemViewModel.baseCFrame * CFrame.new(sway, bob - attack - harvest - hit, 0) * CFrame.Angles(itemAnim.Pitch * 0.35, -itemAnim.Roll * 0.5, 0))
+	itemViewModel.model:PivotTo(cam.CFrame * profile.ViewOffset * CFrame.new(sway, bob - attack - harvest - hit, 0) * CFrame.Angles(itemAnim.Pitch * 0.35, -itemAnim.Roll * 0.5, 0))
 end
 
 local function updateItemAnimation(deltaTime)
