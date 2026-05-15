@@ -8,6 +8,16 @@ local ProgressionService = {}
 local progressionByPlayer = {}
 local context
 
+-- Items awarded automatically when the player reaches each level.
+-- Key = level number reached. Value = { itemId = amount, ... }
+local LEVEL_REWARDS = {
+	[2] = { CampfireKit = 1, Bandage = 2 },
+	[3] = { Spear = 1, CookedBerries = 2 },
+	[4] = { HideArmor = 1, SurvivalTonic = 1 },
+	[5] = { IronSpear = 1, Antidote = 2 },
+	[6] = { IronArmor = 1, SurvivalTonic = 2 },
+}
+
 local function markDirty(player)
 	if context and context.PersistenceService then
 		context.PersistenceService.markPlayerDirty(player)
@@ -39,6 +49,40 @@ local function ensureProgression(player)
 	end
 
 	return progressionByPlayer[player]
+end
+
+-- Grant level-up rewards through InventoryService and notify the client.
+local function grantLevelRewards(player, level)
+	local rewards = LEVEL_REWARDS[level]
+	if not rewards then
+		return
+	end
+
+	if not (context and context.InventoryService) then
+		return
+	end
+
+	local rewardLines = {}
+
+	for itemId, amount in pairs(rewards) do
+		context.InventoryService.addItem(player, itemId, amount)
+
+		local itemConfig = Config.Items[itemId]
+		local displayName = itemConfig and itemConfig.DisplayName or itemId
+		table.insert(rewardLines, string.format("+%d %s", amount, displayName))
+		Remotes.get("Notification"):FireClient(
+			player,
+			string.format("+%d %s (level %d reward)", amount, displayName, level)
+		)
+	end
+
+	-- Also fire the dedicated LevelUpReward event so the client can show a
+	-- special popup banner separate from ordinary toast notifications.
+	Remotes.get("LevelUpReward"):FireClient(player, {
+		Level = level,
+		Rewards = rewards,
+		Lines = rewardLines,
+	})
 end
 
 function ProgressionService.getLevel(player)
@@ -80,10 +124,20 @@ function ProgressionService.addXP(player, amount, reason)
 	progression.Level = getLevelForXP(progression.XP)
 
 	if progression.Level > oldLevel then
+		-- Announce the level-up with a clear, prominent message.
+		local nextXP = getNextThreshold(progression.Level)
+		local nextMsg = nextXP
+			and string.format(" (%d XP to next level)", nextXP - progression.XP)
+			or " (max level!)"
+
 		Remotes.get("Notification"):FireClient(
 			player,
-			string.format("Level %d reached: %s", progression.Level, reason or "survival progress")
+			string.format(">> LEVEL %d REACHED! <<  %s", progression.Level, reason or "survival")
 		)
+		Remotes.get("Notification"):FireClient(player, string.format("Level %d%s", progression.Level, nextMsg))
+
+		-- Grant the free reward items for this level.
+		grantLevelRewards(player, progression.Level)
 	end
 
 	ProgressionService.send(player)
