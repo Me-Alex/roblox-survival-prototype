@@ -1,59 +1,56 @@
--- Main.server.lua
--- Server entry point. Loads all services in order.
-
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players           = game:GetService("Players")
-local RunService        = game:GetService("RunService")
+-- Main.server.lua  (Milestone 2)
+local RunService          = game:GetService("RunService")
+local ReplicatedStorage   = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
 local Shared  = ReplicatedStorage:WaitForChild("Shared")
 local Config  = require(Shared:WaitForChild("Config"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 
-local ServerScript   = script.Parent
-local ServicesFolder = ServerScript:WaitForChild("Services")
-
-local WorldService     = require(ServicesFolder:WaitForChild("WorldService"))
-local VitalsService    = require(ServicesFolder:WaitForChild("VitalsService"))
-local InventoryService = require(ServicesFolder:WaitForChild("InventoryService"))
-local CraftingService  = require(ServicesFolder:WaitForChild("CraftingService"))
-local EnemyService     = require(ServicesFolder:WaitForChild("EnemyService"))
+local Services = ServerScriptService:WaitForChild("Services")
+local VitalsService      = require(Services:WaitForChild("VitalsService"))
+local InventoryService   = require(Services:WaitForChild("InventoryService"))
+local CraftingService    = require(Services:WaitForChild("CraftingService"))
+local WorldService       = require(Services:WaitForChild("WorldService"))
+local ResourceService    = require(Services:WaitForChild("ResourceService"))
+local EnemyService       = require(Services:WaitForChild("EnemyService"))
+local CombatService      = require(Services:WaitForChild("CombatService"))
+local ProgressionService = require(Services:WaitForChild("ProgressionService"))
+local ObjectiveService   = require(Services:WaitForChild("ObjectiveService"))
+local PersistenceService = require(Services:WaitForChild("PersistenceService"))
+local ShopService        = require(Services:WaitForChild("ShopService"))
 
 local ctx = {
-    Config           = Config,
-    Remotes          = Remotes,
-    WorldService     = WorldService,
-    VitalsService    = VitalsService,
-    InventoryService = InventoryService,
-    CraftingService  = CraftingService,
-    EnemyService     = EnemyService,
+    Config=Config, Remotes=Remotes,
+    VitalsService=VitalsService, InventoryService=InventoryService,
+    CraftingService=CraftingService, WorldService=WorldService,
+    ResourceService=ResourceService, EnemyService=EnemyService,
+    CombatService=CombatService, ProgressionService=ProgressionService,
+    ObjectiveService=ObjectiveService, PersistenceService=PersistenceService,
+    ShopService=ShopService,
 }
 
 WorldService:init(ctx)
+ResourceService:init(ctx)
 VitalsService:init(ctx)
 InventoryService:init(ctx)
 CraftingService:init(ctx)
 EnemyService:init(ctx)
+CombatService:init(ctx)
+ProgressionService:init(ctx)
+ObjectiveService:init(ctx)
+PersistenceService:init(ctx)
+ShopService:init(ctx)
 
-print("[Server] All services initialised")
+print("[Server] All services initialised.")
 
-local services = { WorldService, VitalsService, InventoryService, CraftingService, EnemyService }
+local tickables = { WorldService, ResourceService, VitalsService, EnemyService }
+
 RunService.Heartbeat:Connect(function(dt)
-    for _, service in ipairs(services) do
-        if service.tick then service:tick(dt) end
+    for _, svc in ipairs(tickables) do
+        if svc.tick then
+            local ok, err = pcall(svc.tick, svc, dt)
+            if not ok then warn("[Server tick]", err) end
+        end
     end
 end)
-
-Players.PlayerAdded:Connect(function(player)
-    VitalsService:onPlayerAdded(player)
-    InventoryService:onPlayerAdded(player)
-end)
-
-Players.PlayerRemoving:Connect(function(player)
-    VitalsService:onPlayerRemoving(player)
-    InventoryService:onPlayerRemoving(player)
-end)
-
-for _, player in ipairs(Players:GetPlayers()) do
-    VitalsService:onPlayerAdded(player)
-    InventoryService:onPlayerAdded(player)
-end

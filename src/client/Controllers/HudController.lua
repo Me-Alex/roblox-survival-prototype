@@ -1,100 +1,166 @@
--- HudController.lua
--- Draws vital bars (health, hunger, thirst, temperature) and notifications.
--- All UI built in code. No need to set anything up in Studio.
-
-local TweenService  = game:GetService("TweenService")
+-- HudController.lua  (Milestone 2)
+local Players      = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
 
 local HudController = {}
 local ctx
-local bars = {}
-local notifyQueue  = {}
-local notifyActive = false
 
-local function makeFrame(parent, name, bgColor, pos, size)
-    local f = Instance.new("Frame")
-    f.Name=name f.BackgroundColor3=bgColor f.BorderSizePixel=0
-    f.Position=pos f.Size=size f.Parent=parent
-    return f
+local player    = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local C = {
+    health = Color3.fromRGB(210,60,60),   hunger = Color3.fromRGB(210,140,40),
+    thirst = Color3.fromRGB(60,140,210),  temp   = Color3.fromRGB(60,200,160),
+    barBg  = Color3.fromRGB(30,25,20),    panel  = Color3.fromRGB(22,18,14),
+    text   = Color3.fromRGB(230,220,200), night  = Color3.fromRGB(60,80,160),
+    day    = Color3.fromRGB(220,160,60),  green  = Color3.fromRGB(60,200,80),
+    red    = Color3.fromRGB(220,70,60),   yellow = Color3.fromRGB(220,190,60),
+    white  = Color3.fromRGB(230,220,200),
+}
+
+local screenGui, barFrames, dayLabel
+local toastQueue  = {}
+local toastActive = false
+
+local function makeBar(parent, yPos, color, labelText)
+    local container = Instance.new("Frame")
+    container.Size             = UDim2.new(0,200,0,18)
+    container.Position         = UDim2.new(0,12,0,yPos)
+    container.BackgroundColor3 = C.barBg
+    container.BorderSizePixel  = 0
+    container.Parent           = parent
+    Instance.new("UICorner",container).CornerRadius = UDim.new(0,4)
+
+    local fill = Instance.new("Frame")
+    fill.Name              = "Fill"
+    fill.Size              = UDim2.new(1,0,1,0)
+    fill.BackgroundColor3  = color
+    fill.BorderSizePixel   = 0
+    fill.Parent            = container
+    Instance.new("UICorner",fill).CornerRadius = UDim.new(0,4)
+
+    local label = Instance.new("TextLabel")
+    label.Size                   = UDim2.new(1,-6,1,0)
+    label.Position               = UDim2.new(0,6,0,0)
+    label.BackgroundTransparency = 1
+    label.Text                   = labelText
+    label.TextColor3             = C.text
+    label.TextSize               = 11
+    label.Font                   = Enum.Font.GothamBold
+    label.TextXAlignment         = Enum.TextXAlignment.Left
+    label.ZIndex                 = 3
+    label.Parent                 = container
+    return fill
 end
 
-local function buildHud(player)
-    local existing = player.PlayerGui:FindFirstChild("SurvivalHUD")
-    if existing then existing:Destroy() end
-    local gui = Instance.new("ScreenGui")
-    gui.Name="SurvivalHUD" gui.ResetOnSpawn=false gui.Parent=player.PlayerGui
-    local barContainer = makeFrame(gui,"VitalBars",Color3.fromRGB(0,0,0),UDim2.new(0,12,1,-128),UDim2.new(0,160,0,116))
-    barContainer.BackgroundTransparency=1
-    local barDefs = {
-        {id="health",      label="♥ Health",  color=Color3.fromRGB(220,60,60)  },
-        {id="hunger",      label="🍗 Hunger",  color=Color3.fromRGB(210,140,50) },
-        {id="thirst",      label="💧 Thirst",  color=Color3.fromRGB(80,160,220) },
-        {id="temperature", label="🌡 Temp",    color=Color3.fromRGB(200,100,220)},
+local function buildHud()
+    local old = playerGui:FindFirstChild("SurvivalHUD")
+    if old then old:Destroy() end
+
+    screenGui                  = Instance.new("ScreenGui")
+    screenGui.Name             = "SurvivalHUD"
+    screenGui.ResetOnSpawn     = false
+    screenGui.ZIndexBehavior   = Enum.ZIndexBehavior.Sibling
+    screenGui.Parent           = playerGui
+
+    local panel = Instance.new("Frame")
+    panel.Size                 = UDim2.new(0,224,0,110)
+    panel.Position             = UDim2.new(0,8,1,-118)
+    panel.BackgroundColor3     = C.panel
+    panel.BackgroundTransparency = 0.35
+    panel.BorderSizePixel      = 0
+    panel.Parent               = screenGui
+    Instance.new("UICorner",panel).CornerRadius = UDim.new(0,8)
+
+    barFrames = {
+        health = makeBar(panel, 8,  C.health, "❤ Health"),
+        hunger = makeBar(panel, 30, C.hunger, "🍖 Hunger"),
+        thirst = makeBar(panel, 52, C.thirst, "💧 Thirst"),
+        temp   = makeBar(panel, 74, C.temp,   "🌡 Warmth"),
     }
-    bars = {}
-    for i, def in ipairs(barDefs) do
-        local yo = (i-1)*28
-        local track = makeFrame(barContainer,def.id.."Track",Color3.fromRGB(30,30,30),UDim2.new(0,0,0,yo+16),UDim2.new(1,0,0,10))
-        track.BackgroundTransparency=0.5
-        local c1=Instance.new("UICorner") c1.CornerRadius=UDim.new(1,0) c1.Parent=track
-        local fill = makeFrame(track,"Fill",def.color,UDim2.new(0,0,0,0),UDim2.new(1,0,1,0))
-        local c2=Instance.new("UICorner") c2.CornerRadius=UDim.new(1,0) c2.Parent=fill
-        local lbl=Instance.new("TextLabel")
-        lbl.BackgroundTransparency=1 lbl.TextColor3=Color3.fromRGB(210,200,190)
-        lbl.Text=def.label lbl.Font=Enum.Font.GothamBold lbl.TextSize=12
-        lbl.Position=UDim2.new(0,0,0,yo) lbl.Size=UDim2.new(1,0,0,16)
-        lbl.TextXAlignment=Enum.TextXAlignment.Left lbl.Parent=barContainer
-        bars[def.id]=fill
-    end
-    -- Notification label
-    local nf=makeFrame(gui,"NotifyArea",Color3.fromRGB(0,0,0),UDim2.new(0.5,-160,0,8),UDim2.new(0,320,0,40))
-    nf.BackgroundTransparency=1
-    local nl=Instance.new("TextLabel")
-    nl.Name="NotifyLabel" nl.BackgroundColor3=Color3.fromRGB(20,16,12)
-    nl.BackgroundTransparency=0.35 nl.TextColor3=Color3.fromRGB(245,235,210)
-    nl.Font=Enum.Font.GothamBold nl.TextSize=15 nl.Size=UDim2.new(1,0,1,0)
-    nl.TextXAlignment=Enum.TextXAlignment.Center nl.Text="" nl.Visible=false
-    local nc=Instance.new("UICorner") nc.CornerRadius=UDim.new(0,8) nc.Parent=nl
-    nl.Parent=nf
-    return nl
+
+    local dayPanel = Instance.new("Frame")
+    dayPanel.Size                 = UDim2.new(0,160,0,32)
+    dayPanel.Position             = UDim2.new(0,8,0,8)
+    dayPanel.BackgroundColor3     = C.panel
+    dayPanel.BackgroundTransparency = 0.35
+    dayPanel.BorderSizePixel      = 0
+    dayPanel.Parent               = screenGui
+    Instance.new("UICorner",dayPanel).CornerRadius = UDim.new(0,8)
+
+    dayLabel = Instance.new("TextLabel")
+    dayLabel.Size                   = UDim2.new(1,0,1,0)
+    dayLabel.BackgroundTransparency = 1
+    dayLabel.Text                   = "☀  Day 1"
+    dayLabel.TextColor3             = C.day
+    dayLabel.TextSize               = 14
+    dayLabel.Font                   = Enum.Font.GothamBold
+    dayLabel.Parent                 = dayPanel
 end
 
-local function updateBar(id, value, maxValue)
-    local fill = bars[id]
-    if not fill then return end
-    local pct = math.clamp(value/maxValue, 0, 1)
-    TweenService:Create(fill, TweenInfo.new(0.18), { Size=UDim2.new(pct,0,1,0) }):Play()
+local function tweenBar(fill, ratio)
+    TweenService:Create(fill,
+        TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        { Size = UDim2.new(math.clamp(ratio,0,1),0,1,0) }
+    ):Play()
+end
+
+local function popToast()
+    if #toastQueue == 0 then toastActive=false return end
+    toastActive = true
+    local data  = table.remove(toastQueue, 1)
+    local color = C[data.color] or C.white
+
+    local toast = Instance.new("TextLabel")
+    toast.Size                   = UDim2.new(0,300,0,36)
+    toast.Position               = UDim2.new(0.5,-150,1,-160)
+    toast.BackgroundColor3       = C.panel
+    toast.BackgroundTransparency = 0.25
+    toast.BorderSizePixel        = 0
+    toast.Text                   = data.text
+    toast.TextColor3             = color
+    toast.TextSize               = 15
+    toast.Font                   = Enum.Font.GothamBold
+    toast.ZIndex                 = 10
+    toast.Parent                 = screenGui
+    Instance.new("UICorner",toast).CornerRadius = UDim.new(0,8)
+
+    TweenService:Create(toast,
+        TweenInfo.new(0.2,Enum.EasingStyle.Back,Enum.EasingDirection.Out),
+        { Position = UDim2.new(0.5,-150,1,-180) }
+    ):Play()
+
+    task.delay(1.8, function()
+        TweenService:Create(toast,
+            TweenInfo.new(0.4, Enum.EasingStyle.Quad),
+            { TextTransparency=1, BackgroundTransparency=1 }
+        ):Play()
+        task.delay(0.42, function() toast:Destroy() popToast() end)
+    end)
 end
 
 function HudController:init(context)
     ctx = context
-    local player = ctx.Player
-    local notifyLabel = buildHud(player)
-    ctx.Remotes.UpdateVitals:Connect(function(v)
-        local cfg = ctx.Config.Vitals
-        updateBar("health",      v.health,      cfg.MaxHealth)
-        updateBar("hunger",      v.hunger,       cfg.MaxHunger)
-        updateBar("thirst",      v.thirst,       cfg.MaxThirst)
-        updateBar("temperature", v.temperature,  cfg.MaxTemperature)
-    end)
-    ctx.Remotes.Notify:Connect(function(data)
-        table.insert(notifyQueue, data)
-        if not notifyActive then self:_showNextNotify(notifyLabel) end
-    end)
-    player.CharacterAdded:Connect(function() notifyLabel = buildHud(player) end)
-end
+    buildHud()
 
-function HudController:_showNextNotify(label)
-    if #notifyQueue == 0 then notifyActive=false return end
-    notifyActive = true
-    local data = table.remove(notifyQueue, 1)
-    local colors = { green=Color3.fromRGB(100,220,130), red=Color3.fromRGB(230,80,80), yellow=Color3.fromRGB(240,200,60), white=Color3.fromRGB(245,235,210) }
-    label.TextColor3=colors[data.color] or colors.white
-    label.Text=data.text label.Visible=true label.TextTransparency=0
-    task.delay(2.5, function()
-        TweenService:Create(label, TweenInfo.new(0.5), { TextTransparency=1, BackgroundTransparency=1 }):Play()
-        task.wait(0.5)
-        label.Visible=false label.BackgroundTransparency=0.35
-        self:_showNextNotify(label)
+    ctx.Remotes.VitalsUpdate.OnClientEvent:Connect(function(data)
+        local V = ctx.Config.Vitals
+        tweenBar(barFrames.health, data.health / V.MaxHealth)
+        tweenBar(barFrames.hunger, data.hunger / V.MaxHunger)
+        tweenBar(barFrames.thirst, data.thirst / V.MaxThirst)
+        tweenBar(barFrames.temp,   data.temp   / V.MaxTemperature)
+    end)
+
+    ctx.Remotes.DayNightUpdate.OnClientEvent:Connect(function(data)
+        if dayLabel then
+            dayLabel.Text       = (data.isNight and "🌙  Night " or "☀  Day ") .. data.day
+            dayLabel.TextColor3 = data.isNight and C.night or C.day
+        end
+    end)
+
+    ctx.Remotes.Notify.OnClientEvent:Connect(function(data)
+        table.insert(toastQueue, data)
+        if not toastActive then popToast() end
     end)
 end
 

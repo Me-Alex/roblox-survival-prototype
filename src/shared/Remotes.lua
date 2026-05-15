@@ -1,40 +1,33 @@
 -- Remotes.lua
--- Creates or finds all RemoteEvents and RemoteFunctions.
--- Both server and client require this module.
+local RS = game:GetService("ReplicatedStorage")
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local function getOrCreate(className, name, parent)
+local function getOrCreate(parent, name)
     local existing = parent:FindFirstChild(name)
     if existing then return existing end
-    local obj = Instance.new(className)
-    obj.Name = name
-    obj.Parent = parent
-    return obj
+    local r = Instance.new("RemoteEvent")
+    r.Name   = name
+    r.Parent = parent
+    return r
 end
 
-local remotesFolder = getOrCreate("Folder", "Remotes", ReplicatedStorage)
+local container = RS:FindFirstChild("SurvivalRemotes")
+if not container then
+    container      = Instance.new("Folder")
+    container.Name = "SurvivalRemotes"
+    container.Parent = RS
+end
 
 local Remotes = {}
-
--- Vitals
-Remotes.UpdateVitals     = getOrCreate("RemoteEvent", "UpdateVitals",     remotesFolder)
--- Inventory
-Remotes.UpdateInventory  = getOrCreate("RemoteEvent", "UpdateInventory",  remotesFolder)
-Remotes.UseItem          = getOrCreate("RemoteEvent", "UseItem",          remotesFolder)
-Remotes.DropItem         = getOrCreate("RemoteEvent", "DropItem",         remotesFolder)
--- Crafting
-Remotes.CraftItem        = getOrCreate("RemoteEvent", "CraftItem",        remotesFolder)
-Remotes.CraftResult      = getOrCreate("RemoteEvent", "CraftResult",      remotesFolder)
--- Interaction
-Remotes.Interact         = getOrCreate("RemoteEvent", "Interact",         remotesFolder)
-Remotes.ShowPrompt       = getOrCreate("RemoteEvent", "ShowPrompt",       remotesFolder)
--- World
-Remotes.UpdateWorld      = getOrCreate("RemoteEvent", "UpdateWorld",      remotesFolder)
-Remotes.ResourceChanged  = getOrCreate("RemoteEvent", "ResourceChanged",  remotesFolder)
--- Notifications
-Remotes.Notify           = getOrCreate("RemoteEvent", "Notify",           remotesFolder)
--- Structures
-Remotes.PlaceStructure   = getOrCreate("RemoteEvent", "PlaceStructure",   remotesFolder)
+Remotes.VitalsUpdate     = getOrCreate(container, "VitalsUpdate")
+Remotes.InventoryUpdate  = getOrCreate(container, "InventoryUpdate")
+Remotes.Notify           = getOrCreate(container, "Notify")
+Remotes.ResourceChanged  = getOrCreate(container, "ResourceChanged")
+Remotes.DayNightUpdate   = getOrCreate(container, "DayNightUpdate")
+Remotes.ObjectiveUpdate  = getOrCreate(container, "ObjectiveUpdate")
+Remotes.CraftRequest     = getOrCreate(container, "CraftRequest")
+Remotes.UseItem          = getOrCreate(container, "UseItem")
+Remotes.DropItem         = getOrCreate(container, "DropItem")
+Remotes.PlaceStructure   = getOrCreate(container, "PlaceStructure")
+Remotes.AttackRequest    = getOrCreate(container, "AttackRequest")
 
 return Remotes
