@@ -133,9 +133,12 @@ end
 function ResourceService:placeShelter(position)
     local function wall(cf, sz, col)
         local p = Instance.new("Part")
-        p.Anchored=true p.CFrame=cf p.Size=sz
-        p.Color=col p.Material=Enum.Material.Wood
-        p.Parent=Workspace
+        p.Anchored = true
+        p.CFrame = cf
+        p.Size = sz
+        p.Color = col
+        p.Material = Enum.Material.Wood
+        p.Parent = Workspace
         return p
     end
     local col = Color3.fromRGB(80, 60, 40)

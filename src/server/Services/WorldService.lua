@@ -38,16 +38,28 @@ function WorldService:setupLighting()
     Lighting.FogColor          = Color3.fromRGB(140, 100, 60)
 
     local atmo = Lighting:FindFirstChild("Atmosphere") or Instance.new("Atmosphere")
-    atmo.Name="Atmosphere" atmo.Density=0.55
-    atmo.Color=Color3.fromRGB(172,122,72) atmo.Decay=Color3.fromRGB(68,44,32)
-    atmo.Glare=0.3 atmo.Haze=3.2 atmo.Parent=Lighting
+    atmo.Name = "Atmosphere"
+    atmo.Density = 0.55
+    atmo.Color = Color3.fromRGB(172, 122, 72)
+    atmo.Decay = Color3.fromRGB(68, 44, 32)
+    atmo.Glare = 0.3
+    atmo.Haze = 3.2
+    atmo.Parent = Lighting
 
     local bloom = Lighting:FindFirstChild("Bloom") or Instance.new("BloomEffect")
-    bloom.Name="Bloom" bloom.Intensity=0.35 bloom.Size=26 bloom.Threshold=1.0 bloom.Parent=Lighting
+    bloom.Name = "Bloom"
+    bloom.Intensity = 0.35
+    bloom.Size = 26
+    bloom.Threshold = 1.0
+    bloom.Parent = Lighting
 
     local cc = Lighting:FindFirstChild("ColorCorrection") or Instance.new("ColorCorrectionEffect")
-    cc.Name="ColorCorrection" cc.Brightness=-0.05 cc.Contrast=0.25
-    cc.Saturation=0.10 cc.TintColor=Color3.fromRGB(255,215,168) cc.Parent=Lighting
+    cc.Name = "ColorCorrection"
+    cc.Brightness = -0.05
+    cc.Contrast = 0.25
+    cc.Saturation = 0.10
+    cc.TintColor = Color3.fromRGB(255, 215, 168)
+    cc.Parent = Lighting
 end
 
 -- ── Terrain generation ────────────────────────────────────────────────────
@@ -55,7 +67,8 @@ end
 function WorldService:generateTerrain()
     if Workspace:FindFirstChild("_TerrainGenDone") then return end
     local marker = Instance.new("BoolValue")
-    marker.Name = "_TerrainGenDone" marker.Parent = Workspace
+    marker.Name = "_TerrainGenDone"
+    marker.Parent = Workspace
 
     local terrain = Workspace.Terrain
     terrain:Clear()
@@ -145,10 +158,13 @@ function WorldService:generateTerrain()
 
     if not Workspace:FindFirstChild("SurvivalSpawn") then
         local spawn = Instance.new("SpawnLocation")
-        spawn.Name="SurvivalSpawn" spawn.Anchored=true
-        spawn.Size=Vector3.new(10,1,10) spawn.CFrame=CFrame.new(0,2,0)
-        spawn.Color=Color3.fromRGB(88,72,52) spawn.Material=Enum.Material.Cobblestone
-        spawn.Parent=Workspace
+        spawn.Name = "SurvivalSpawn"
+        spawn.Anchored = true
+        spawn.Size = Vector3.new(10, 1, 10)
+        spawn.CFrame = CFrame.new(0, 2, 0)
+        spawn.Color = Color3.fromRGB(88, 72, 52)
+        spawn.Material = Enum.Material.Cobblestone
+        spawn.Parent = Workspace
     end
 end
 
@@ -218,7 +234,8 @@ end
 function WorldService:spawnResourceNodes()
     if Workspace:FindFirstChild("_ResourcesDone") then return end
     local marker = Instance.new("BoolValue")
-    marker.Name = "_ResourcesDone" marker.Parent = Workspace
+    marker.Name = "_ResourcesDone"
+    marker.Parent = Workspace
 
     local cfg  = ctx.Config
     local rng  = Random.new(cfg.World.Seed + 1)
@@ -232,13 +249,16 @@ function WorldService:spawnResourceNodes()
                 Vector3.new(2.5, 8, 2.5),
                 Color3.fromRGB(40, 32, 28), Enum.Material.Wood, "Tree")
             local crown = Instance.new("Part")
-            crown.Anchored=true crown.Shape=Enum.PartType.Ball
-            crown.Size=Vector3.new(7,6,7)
-            crown.CFrame=CFrame.new(pos + Vector3.new(0, 10, 0))
-            crown.Color=Color3.fromRGB(52, 48, 44)
-            crown.Material=Enum.Material.Grass
-            crown.CastShadow=false crown.CanCollide=false
-            crown.Name="TreeCrown" crown.Parent=Workspace
+            crown.Anchored = true
+            crown.Shape = Enum.PartType.Ball
+            crown.Size = Vector3.new(7, 6, 7)
+            crown.CFrame = CFrame.new(pos + Vector3.new(0, 10, 0))
+            crown.Color = Color3.fromRGB(52, 48, 44)
+            crown.Material = Enum.Material.Grass
+            crown.CastShadow = false
+            crown.CanCollide = false
+            crown.Name = "TreeCrown"
+            crown.Parent = Workspace
         end
     end
 
@@ -277,16 +297,23 @@ end
 
 function WorldService:spawnCampfire(position)
     local cf = Instance.new("Part")
-    cf.Name="Campfire" cf.Anchored=true
-    cf.Size=Vector3.new(3,1,3) cf.CFrame=CFrame.new(position)
-    cf.Color=Color3.fromRGB(180,90,20) cf.Material=Enum.Material.Neon
+    cf.Name = "Campfire"
+    cf.Anchored = true
+    cf.Size = Vector3.new(3, 1, 3)
+    cf.CFrame = CFrame.new(position)
+    cf.Color = Color3.fromRGB(180, 90, 20)
+    cf.Material = Enum.Material.Neon
 
     local light = Instance.new("PointLight")
-    light.Brightness=4 light.Range=ctx.Config.Vitals.CampfireWarmRadius*1.5
-    light.Color=Color3.fromRGB(255,160,60) light.Parent=cf
+    light.Brightness = 4
+    light.Range = ctx.Config.Vitals.CampfireWarmRadius * 1.5
+    light.Color = Color3.fromRGB(255, 160, 60)
+    light.Parent = cf
 
     Instance.new("BoolValue", cf).Name="IsCampfire"
-    local fuel=Instance.new("IntValue",cf) fuel.Name="Fuel" fuel.Value=100
+    local fuel = Instance.new("IntValue", cf)
+    fuel.Name = "Fuel"
+    fuel.Value = 100
 
     cf.Parent=Workspace
     return cf

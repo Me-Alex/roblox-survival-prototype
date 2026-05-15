@@ -1,5 +1,9 @@
 {
   "name": "VolcanicSurvival",
+  "globIgnorePaths": [
+    "src/server/GameBootstrap.server.lua",
+    "src/client/SurvivalClient.client.lua"
+  ],
   "tree": {
     "$className": "DataModel",
     "ServerScriptService": {
