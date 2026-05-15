@@ -126,20 +126,6 @@ SurvivalConfig.Items = {
 	Stone = { DisplayName = "Stone", Category = "Resource" },
 	Fiber = { DisplayName = "Fiber", Category = "Resource" },
 	Hide = { DisplayName = "Hide", Category = "Resource" },
-	Fur = {
-		DisplayName = "Fur",
-		Description = "Soft animal fur. Used in crafting warm clothing.",
-		Category = "Material",
-		Icon = "🐇",
-		MaxStack = 20,
-	},
-	Antler = {
-		DisplayName = "Antler",
-		Description = "A hard deer antler. Can be used as a tool handle or traded.",
-		Category = "Material",
-		Icon = "🦌",
-		MaxStack = 10,
-	},
 	IronOre = { DisplayName = "Iron Ore", Category = "Resource" },
 	IronIngot = { DisplayName = "Iron Ingot", Category = "Resource" },
 	AncientScrap = { DisplayName = "Ancient Scrap", Category = "Resource" },
@@ -159,6 +145,7 @@ SurvivalConfig.Items = {
 	IronSpear = { DisplayName = "Iron Spear", Category = "Weapon" },
 	HideArmor = { DisplayName = "Hide Armor", Category = "Armor" },
 	IronArmor = { DisplayName = "Iron Armor", Category = "Armor" },
+	FurVest = { DisplayName = "Fur Vest", Category = "Armor", Description = "A warm vest sewn from animal fur. Helps resist cold." },
 	CampfireKit = { DisplayName = "Campfire Kit", Category = "Buildable" },
 	TorchStandKit = { DisplayName = "Torch Stand Kit", Category = "Buildable" },
 	ShelterKit = { DisplayName = "Shelter Kit", Category = "Buildable" },
@@ -404,6 +391,14 @@ SurvivalConfig.Crafting = {
 		Amount = 1,
 		Description = "Reduces damage from enemies.",
 	},
+	FurVest = {
+		DisplayName = "Fur Vest",
+		Cost = { Fur = 6, Fiber = 3 },
+		Result = "FurVest",
+		Amount = 1,
+		RequiredLevel = 2,
+		Description = "Sewn from rabbit fur. Provides warmth and light protection.",
+	},
 	IronArmor = {
 		DisplayName = "Iron Armor",
 		Cost = { IronIngot = 5, Hide = 2, Fiber = 3 },
@@ -530,7 +525,7 @@ SurvivalConfig.CraftingCategories = {
 		Id = "Advanced",
 		DisplayName = "Advanced",
 		Description = "Workbench and forge progression gear.",
-		Recipes = { "ForgeKit", "IronIngot", "IronSpear", "HideArmor", "IronArmor" },
+		Recipes = { "ForgeKit", "IronIngot", "IronSpear", "HideArmor", "FurVest", "IronArmor" },
 	},
 }
 
@@ -841,6 +836,13 @@ SurvivalConfig.Shops = {
 				Amount = 1,
 				Cost = { AncientScrap = 4, IronIngot = 5, SurvivalTonic = 1 },
 			},
+			{
+				Id = "AntlerTrade",
+				DisplayName = "Trade Antler",
+				ItemId = "AncientScrap",
+				Amount = 2,
+				Cost = { Antler = 1 },
+			},
 		},
 	},
 }
@@ -959,7 +961,7 @@ SurvivalConfig.Buildables = {
 		DisplayName = "Storage Chest",
 		Radius = 9,
 		LifetimeSeconds = 0,
-		StorageItems = { "Wood", "Leaves", "Stone", "Fiber", "IronOre", "IronIngot", "AncientScrap", "MedicinalHerb", "Hide" },
+		StorageItems = { "Wood", "Leaves", "Stone", "Fiber", "IronOre", "IronIngot", "AncientScrap", "MedicinalHerb", "Hide", "Fur", "Antler" },
 		TransferAmount = 10,
 	},
 	WatchtowerKit = {
@@ -1008,6 +1010,7 @@ SurvivalConfig.Equipment = {
 	Spear = { Slot = "Weapon", MaxDurability = 64 },
 	IronSpear = { Slot = "Weapon", MaxDurability = 120 },
 	HideArmor = { Slot = "Armor", MaxDurability = 95 },
+	FurVest = { Slot = "Armor", MaxDurability = 75 },
 	IronArmor = { Slot = "Armor", MaxDurability = 170 },
 }
 
@@ -1154,6 +1157,7 @@ SurvivalConfig.Combat = {
 	},
 	Armor = {
 		HideArmor = { DamageMultiplier = 0.65 },
+		FurVest = { DamageMultiplier = 0.80 },
 		IronArmor = { DamageMultiplier = 0.45 },
 	},
 }
