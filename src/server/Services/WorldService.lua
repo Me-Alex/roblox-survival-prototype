@@ -591,6 +591,10 @@ end
 
 function WorldService:init(context)
     ctx = context
+    local cfg = getWorldConfig()
+    day = 1
+    dayTimer = (9 / 24) * cfg.dayLength
+
     self:setupLighting()
     self:generateTerrain()
     self:spawnResourceNodes()
