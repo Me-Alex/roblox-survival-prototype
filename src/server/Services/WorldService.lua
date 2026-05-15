@@ -5,21 +5,19 @@ local Workspace = game:GetService("Workspace")
 local WorldService = { _isWorldService = true }
 
 local ctx
-local dayTimer = 0
 local day = 1
-local spawnedPositions = {}
+local dayTimer = 0
+local claimedResourceSpots = {}
 
-local terrainState = {
+local worldState = {
     seed = 42,
     halfSize = 600,
-    islandRadius = 540,
-    lavaCoreRadius = 0,
-    lavaRimRadius = 0,
-    beachInnerRadius = 500,
+    islandRadius = 520,
+    beachRadius = 485,
+    spawnFlatRadius = 110,
     step = 24,
     oceanFloorY = -160,
     oceanSurfaceY = 0,
-    spawnFlattenRadius = 110,
 }
 
 local function lerp(a, b, t)
@@ -27,75 +25,71 @@ local function lerp(a, b, t)
 end
 
 local function getWorldConfig()
-    local worldCfg = (ctx and ctx.Config and ctx.Config.World) or {}
-    local halfSize = tonumber(worldCfg.HalfSize or worldCfg.SpawnAreaHalfSize) or 600
-    halfSize = math.max(200, halfSize)
+    local cfg = (ctx and ctx.Config and ctx.Config.World) or {}
+    local halfSize = tonumber(cfg.HalfSize or cfg.SpawnAreaHalfSize) or 600
+    halfSize = math.max(220, halfSize)
 
-    local seed = tonumber(worldCfg.Seed) or 42
-    local dayLength = tonumber(worldCfg.DayLengthSecs or worldCfg.DayLengthSeconds) or 480
-    local nightStart = tonumber(worldCfg.NightStartClock or worldCfg.NightStart) or 19
-    local nightEnd = tonumber(worldCfg.NightEndClock or worldCfg.NightEnd) or 6
-
-    local spawnPoint = worldCfg.SpawnPoint
+    local spawnPoint = cfg.SpawnPoint
     if typeof(spawnPoint) ~= "Vector3" then
         spawnPoint = Vector3.new(0, 0, 24)
     end
 
     return {
-        seed = seed,
+        seed = tonumber(cfg.Seed) or 42,
         halfSize = halfSize,
-        dayLength = math.max(60, dayLength),
-        nightStart = nightStart,
-        nightEnd = nightEnd,
+        dayLength = math.max(60, tonumber(cfg.DayLengthSecs or cfg.DayLengthSeconds) or 480),
+        nightStart = tonumber(cfg.NightStartClock or cfg.NightStart) or 19,
+        nightEnd = tonumber(cfg.NightEndClock or cfg.NightEnd) or 6,
         spawnPoint = spawnPoint,
     }
 end
 
-local function surfaceProfileAt(x, z)
+local function isInsideIslandXZ(x, z, padding)
+    padding = padding or 0
     local dist = math.sqrt(x * x + z * z)
-    if dist > terrainState.islandRadius then
+    return dist <= (worldState.islandRadius - padding)
+end
+
+local function terrainProfileAt(x, z)
+    local dist = math.sqrt(x * x + z * z)
+    if dist > worldState.islandRadius then
         return nil
     end
 
-    local normalized = dist / terrainState.islandRadius
-    local radialHeight = 24 * (1 - normalized ^ 1.55) + 4
+    local radial = dist / worldState.islandRadius
+    local base = 22 * (1 - radial ^ 1.45) + 4
 
-    local n1 = math.noise((x + terrainState.seed * 0.13) / 175, (z - terrainState.seed * 0.19) / 175, terrainState.seed * 0.001)
-    local n2 = math.noise((x - terrainState.seed * 0.27) / 72, (z + terrainState.seed * 0.09) / 72, terrainState.seed * 0.002)
-    local n3 = math.noise((x + terrainState.seed * 0.41) / 34, (z + terrainState.seed * 0.23) / 34, terrainState.seed * 0.003)
-    local height = radialHeight + n1 * 8 + n2 * 4 + n3 * 1.4
+    local macro = math.noise((x + worldState.seed * 0.17) / 170, (z - worldState.seed * 0.23) / 170, worldState.seed * 0.001)
+    local micro = math.noise((x - worldState.seed * 0.31) / 65, (z + worldState.seed * 0.11) / 65, worldState.seed * 0.002)
+    local detail = math.noise((x + worldState.seed * 0.47) / 32, (z + worldState.seed * 0.19) / 32, worldState.seed * 0.003)
 
-    local spawnBlend = 1 - math.clamp(dist / terrainState.spawnFlattenRadius, 0, 1)
-    if spawnBlend > 0 then
-        local flatHeight = 6.2 + n2 * 0.8
-        height = lerp(height, flatHeight, spawnBlend * 0.85)
+    local height = base + macro * 8 + micro * 4 + detail * 1.6
+
+    local flatAlpha = 1 - math.clamp(dist / worldState.spawnFlatRadius, 0, 1)
+    if flatAlpha > 0 then
+        local target = 6 + micro * 0.9
+        height = lerp(height, target, flatAlpha * 0.9)
     end
 
-    if dist > terrainState.beachInnerRadius then
-        local beachAlpha = math.clamp(
-            (dist - terrainState.beachInnerRadius) / (terrainState.islandRadius - terrainState.beachInnerRadius),
-            0,
-            1
-        )
-        local beachHeight = lerp(3.2, 0.7, beachAlpha)
-        height = math.min(height, beachHeight + n2 * 0.5)
+    if dist > worldState.beachRadius then
+        local beachAlpha = math.clamp((dist - worldState.beachRadius) / (worldState.islandRadius - worldState.beachRadius), 0, 1)
+        local beachHeight = lerp(3.2, 0.8, beachAlpha)
+        height = math.min(height, beachHeight + micro * 0.4)
     end
 
     height = math.clamp(height, 0.35, 46)
 
     local material
-    if normalized > 0.90 then
+    if radial > 0.9 then
         material = Enum.Material.Sand
+    elseif height < 4.8 then
+        material = Enum.Material.Mud
     elseif height > 28 then
         material = Enum.Material.Rock
     elseif height > 16 then
         material = Enum.Material.Slate
-    elseif height < 4.5 then
-        material = Enum.Material.Mud
-    elseif normalized < 0.85 then
-        material = Enum.Material.Grass
     else
-        material = Enum.Material.Sand
+        material = Enum.Material.Grass
     end
 
     return {
@@ -105,30 +99,19 @@ local function surfaceProfileAt(x, z)
     }
 end
 
-local function isLavaZone(x, z)
-    return false
-end
-
-local function isInsideIsland(x, z, padding)
-    padding = padding or 0
-    local dist = math.sqrt(x * x + z * z)
-    return dist <= (terrainState.islandRadius - padding)
-end
-
-local function clearRuntimeWorldObjects()
+local function clearGeneratedWorld()
     for _, obj in ipairs(Workspace:GetChildren()) do
-        if obj.Name == "_TerrainGenDone"
-            or obj.Name == "_ResourcesDone"
-            or obj.Name == "SurvivalWorld"
+        if obj.Name == "SurvivalWorld"
             or obj.Name == "WaterPuddle"
             or obj.Name == "NightStalker"
             or obj.Name == "Rabbit"
             or obj.Name == "Deer"
             or obj.Name == "Bedroll"
+            or obj.Name == "TreeCrown"
         then
             obj:Destroy()
         elseif obj:IsA("BasePart") then
-            if obj.Name == "TreeCrown"
+            if obj.Name == "Campfire"
                 or obj:FindFirstChild("NodeType")
                 or obj:FindFirstChild("IsCampfire")
                 or obj:GetAttribute("IsStoneOven")
@@ -142,6 +125,42 @@ local function clearRuntimeWorldObjects()
             end
         end
     end
+end
+
+local function createResourceNode(position, size, color, material, nodeType)
+    local node = Instance.new("Part")
+    node.Name = nodeType .. "Node"
+    node.Anchored = true
+    node.Size = size
+    node.CFrame = CFrame.new(position)
+    node.Color = color
+    node.Material = material
+    node.CastShadow = true
+
+    local nodeTypeValue = Instance.new("StringValue")
+    nodeTypeValue.Name = "NodeType"
+    nodeTypeValue.Value = nodeType
+    nodeTypeValue.Parent = node
+
+    local harvested = Instance.new("BoolValue")
+    harvested.Name = "Harvested"
+    harvested.Value = false
+    harvested.Parent = node
+
+    local hitsLeft = Instance.new("IntValue")
+    hitsLeft.Name = "HitsLeft"
+    hitsLeft.Value = ((ctx.Config.Resources and ctx.Config.Resources.Hits) and ctx.Config.Resources.Hits[nodeType]) or 1
+    hitsLeft.Parent = node
+
+    local prompt = Instance.new("ProximityPrompt")
+    prompt.ActionText = "Harvest"
+    prompt.ObjectText = nodeType
+    prompt.HoldDuration = 0
+    prompt.MaxActivationDistance = 8
+    prompt.Parent = node
+
+    node.Parent = Workspace
+    return node
 end
 
 function WorldService:setupLighting()
@@ -158,71 +177,68 @@ function WorldService:setupLighting()
 
     local atmo = Lighting:FindFirstChild("Atmosphere") or Instance.new("Atmosphere")
     atmo.Name = "Atmosphere"
-    atmo.Density = 0.55
+    atmo.Density = 0.52
     atmo.Color = Color3.fromRGB(172, 122, 72)
     atmo.Decay = Color3.fromRGB(68, 44, 32)
     atmo.Glare = 0.3
-    atmo.Haze = 3.2
+    atmo.Haze = 3.1
     atmo.Parent = Lighting
 
     local bloom = Lighting:FindFirstChild("Bloom") or Instance.new("BloomEffect")
     bloom.Name = "Bloom"
-    bloom.Intensity = 0.35
-    bloom.Size = 26
+    bloom.Intensity = 0.32
+    bloom.Size = 24
     bloom.Threshold = 1.0
     bloom.Parent = Lighting
 
     local cc = Lighting:FindFirstChild("ColorCorrection") or Instance.new("ColorCorrectionEffect")
     cc.Name = "ColorCorrection"
     cc.Brightness = -0.05
-    cc.Contrast = 0.25
-    cc.Saturation = 0.10
+    cc.Contrast = 0.22
+    cc.Saturation = 0.08
     cc.TintColor = Color3.fromRGB(255, 215, 168)
     cc.Parent = Lighting
 end
 
 function WorldService:generateTerrain()
-    local worldCfg = getWorldConfig()
-    terrainState.seed = worldCfg.seed
-    terrainState.halfSize = worldCfg.halfSize
-    terrainState.islandRadius = math.max(140, worldCfg.halfSize - 62)
-    terrainState.lavaCoreRadius = 0
-    terrainState.lavaRimRadius = 0
-    terrainState.beachInnerRadius = math.max(terrainState.spawnFlattenRadius + 240, terrainState.islandRadius - 44)
-    terrainState.spawnFlattenRadius = math.clamp(terrainState.islandRadius * 0.2, 90, 150)
-    terrainState.step = 24
-    terrainState.oceanFloorY = -160
-    terrainState.oceanSurfaceY = 0
+    local cfg = getWorldConfig()
+    worldState.seed = cfg.seed
+    worldState.halfSize = cfg.halfSize
+    worldState.islandRadius = math.max(160, cfg.halfSize - 70)
+    worldState.spawnFlatRadius = math.clamp(worldState.islandRadius * 0.22, 90, 155)
+    worldState.beachRadius = math.max(worldState.spawnFlatRadius + 240, worldState.islandRadius - 42)
+    worldState.step = 24
+    worldState.oceanFloorY = -160
+    worldState.oceanSurfaceY = 0
 
-    clearRuntimeWorldObjects()
-    table.clear(spawnedPositions)
+    clearGeneratedWorld()
+    table.clear(claimedResourceSpots)
 
     local terrain = Workspace.Terrain
     terrain:Clear()
 
-    local oceanDepth = terrainState.oceanSurfaceY - terrainState.oceanFloorY
+    local oceanDepth = worldState.oceanSurfaceY - worldState.oceanFloorY
     terrain:FillBlock(
-        CFrame.new(0, terrainState.oceanFloorY + oceanDepth * 0.5, 0),
-        Vector3.new(terrainState.halfSize * 4, oceanDepth, terrainState.halfSize * 4),
+        CFrame.new(0, worldState.oceanFloorY + oceanDepth * 0.5, 0),
+        Vector3.new(worldState.halfSize * 4, oceanDepth, worldState.halfSize * 4),
         Enum.Material.Water
     )
 
-    for x = -terrainState.halfSize, terrainState.halfSize, terrainState.step do
-        for z = -terrainState.halfSize, terrainState.halfSize, terrainState.step do
-            local profile = surfaceProfileAt(x, z)
+    for x = -worldState.halfSize, worldState.halfSize, worldState.step do
+        for z = -worldState.halfSize, worldState.halfSize, worldState.step do
+            local profile = terrainProfileAt(x, z)
             if profile then
-                local thickness = profile.height - terrainState.oceanFloorY
+                local thickness = profile.height - worldState.oceanFloorY
                 terrain:FillBlock(
-                    CFrame.new(x, terrainState.oceanFloorY + thickness * 0.5, z),
-                    Vector3.new(terrainState.step, thickness, terrainState.step),
+                    CFrame.new(x, worldState.oceanFloorY + thickness * 0.5, z),
+                    Vector3.new(worldState.step, thickness, worldState.step),
                     profile.material
                 )
-
             end
         end
     end
 
-    local spawnY = self:getTerrainHeightAt(worldCfg.spawnPoint.X, worldCfg.spawnPoint.Z)
+    local spawnY = self:getTerrainHeightAt(cfg.spawnPoint.X, cfg.spawnPoint.Z)
     local spawn = Workspace:FindFirstChild("SurvivalSpawn")
     if not spawn then
         spawn = Instance.new("SpawnLocation")
@@ -233,68 +249,45 @@ function WorldService:generateTerrain()
         spawn.Material = Enum.Material.Cobblestone
         spawn.Parent = Workspace
     end
-    spawn.CFrame = CFrame.new(worldCfg.spawnPoint.X, spawnY + 1.1, worldCfg.spawnPoint.Z)
+    spawn.CFrame = CFrame.new(cfg.spawnPoint.X, spawnY + 1.1, cfg.spawnPoint.Z)
 end
 
 function WorldService.getTerrainHeightAt(a, b, c)
-    local x, z
+    local x
+    local z
     if type(a) == "table" and a._isWorldService then
-        x, z = b, c
+        x = b
+        z = c
     else
-        x, z = a, b
+        x = a
+        z = b
     end
 
     x = tonumber(x) or 0
     z = tonumber(z) or 0
 
-    local profile = surfaceProfileAt(x, z)
+    local profile = terrainProfileAt(x, z)
     if profile then
         return profile.height
     end
-    return terrainState.oceanSurfaceY
-end
-
-function WorldService:isLavaAt(x, z)
-    return isLavaZone(tonumber(x) or 0, tonumber(z) or 0)
+    return worldState.oceanSurfaceY
 end
 
 function WorldService:isInsideIsland(x, z, padding)
-    return isInsideIsland(tonumber(x) or 0, tonumber(z) or 0, padding)
+    return isInsideIslandXZ(tonumber(x) or 0, tonumber(z) or 0, padding)
 end
 
-function WorldService:snapToGround(position, heightOffset, allowLava)
-    if typeof(position) ~= "Vector3" then
-        return Vector3.new(0, 1, 0)
-    end
-
-    local y = self:getTerrainHeightAt(position.X, position.Z)
-    local snapped = Vector3.new(position.X, y + (tonumber(heightOffset) or 0), position.Z)
-
-    if allowLava or not self:isLavaAt(position.X, position.Z) then
-        return snapped
-    end
-
-    local fallback = self:sampleGroundPosition({
-        minRadius = 18,
-        maxRadius = terrainState.islandRadius - 24,
-        attempts = 24,
-        excludeLava = true,
-        minHeight = terrainState.oceanSurfaceY + 0.5,
-    })
-
-    if fallback then
-        return fallback + Vector3.new(0, tonumber(heightOffset) or 0, 0)
-    end
-    return snapped
+function WorldService:isLavaAt(_x, _z)
+    return false
 end
 
 function WorldService:sampleGroundPosition(options)
     options = options or {}
-    local worldRng = options.rng or Random.new(terrainState.seed + 13)
+    local rng = options.rng or Random.new(worldState.seed + 33)
 
     local minRadius = math.max(0, tonumber(options.minRadius) or 0)
-    local maxRadius = tonumber(options.maxRadius) or (terrainState.islandRadius - 20)
-    maxRadius = math.min(maxRadius, terrainState.islandRadius - (tonumber(options.edgePadding) or 20))
+    local maxRadius = tonumber(options.maxRadius) or (worldState.islandRadius - 20)
+    maxRadius = math.min(maxRadius, worldState.islandRadius - (tonumber(options.edgePadding) or 20))
     if maxRadius <= minRadius then
         return nil
     end
@@ -304,24 +297,19 @@ function WorldService:sampleGroundPosition(options)
     local minHeight = tonumber(options.minHeight) or -math.huge
     local maxHeight = tonumber(options.maxHeight) or math.huge
     local center = options.center
-    local centerX = (typeof(center) == "Vector3" and center.X) or 0
-    local centerZ = (typeof(center) == "Vector3" and center.Z) or 0
+    local cx = (typeof(center) == "Vector3" and center.X) or 0
+    local cz = (typeof(center) == "Vector3" and center.Z) or 0
 
     for _ = 1, attempts do
-        local angle = worldRng:NextNumber(0, math.pi * 2)
-        local radius = math.sqrt(worldRng:NextNumber(minRadius * minRadius, maxRadius * maxRadius))
-        local x = centerX + math.cos(angle) * radius
-        local z = centerZ + math.sin(angle) * radius
+        local angle = rng:NextNumber(0, math.pi * 2)
+        local radius = math.sqrt(rng:NextNumber(minRadius * minRadius, maxRadius * maxRadius))
+        local x = cx + math.cos(angle) * radius
+        local z = cz + math.sin(angle) * radius
 
-        if not isInsideIsland(x, z, tonumber(options.edgePadding) or 20) then
+        if not isInsideIslandXZ(x, z, tonumber(options.edgePadding) or 20) then
             continue
         end
-
         if avoidRadius > 0 and (x * x + z * z) < (avoidRadius * avoidRadius) then
-            continue
-        end
-
-        if options.excludeLava and isLavaZone(x, z) then
             continue
         end
 
@@ -329,8 +317,7 @@ function WorldService:sampleGroundPosition(options)
         if y < minHeight or y > maxHeight then
             continue
         end
-
-        if options.requireDry ~= false and y <= terrainState.oceanSurfaceY + 0.05 then
+        if options.requireDry ~= false and y <= worldState.oceanSurfaceY + 0.05 then
             continue
         end
 
@@ -340,90 +327,61 @@ function WorldService:sampleGroundPosition(options)
     return nil
 end
 
-local function tooClose(pos, minDist)
-    for _, existing in ipairs(spawnedPositions) do
-        if (pos - existing).Magnitude < minDist then
+function WorldService:snapToGround(position, heightOffset, _allowLava)
+    if typeof(position) ~= "Vector3" then
+        return Vector3.new(0, 1, 0)
+    end
+
+    local y = self:getTerrainHeightAt(position.X, position.Z)
+    return Vector3.new(position.X, y + (tonumber(heightOffset) or 0), position.Z)
+end
+
+local function isTooCloseToClaimed(pos, minDist)
+    for _, existing in ipairs(claimedResourceSpots) do
+        if (existing - pos).Magnitude < minDist then
             return true
         end
     end
     return false
 end
 
-local function reserveGroundPosition(rng, minDist)
-    for _ = 1, 80 do
+local function claimResourcePosition(rng, minDist)
+    for _ = 1, 90 do
         local pos = WorldService:sampleGroundPosition({
             rng = rng,
-            minRadius = terrainState.spawnFlattenRadius + 10,
-            maxRadius = terrainState.islandRadius - 40,
-            avoidRadius = terrainState.spawnFlattenRadius - 20,
-            excludeLava = true,
-            minHeight = terrainState.oceanSurfaceY + 0.8,
+            minRadius = worldState.spawnFlatRadius + 18,
+            maxRadius = worldState.islandRadius - 44,
+            avoidRadius = worldState.spawnFlatRadius - 20,
+            minHeight = worldState.oceanSurfaceY + 0.8,
             attempts = 1,
             edgePadding = 28,
         })
-        if pos and not tooClose(pos, minDist) then
-            table.insert(spawnedPositions, pos)
+        if pos and not isTooCloseToClaimed(pos, minDist) then
+            table.insert(claimedResourceSpots, pos)
             return pos
         end
     end
     return nil
 end
 
-local function makeNodePart(pos, size, color, material, nodeType)
-    local node = Instance.new("Part")
-    node.Anchored = true
-    node.Size = size
-    node.CFrame = CFrame.new(pos)
-    node.Color = color
-    node.Material = material
-    node.CastShadow = true
-    node.Name = nodeType .. "Node"
-
-    local nodeTypeValue = Instance.new("StringValue")
-    nodeTypeValue.Name = "NodeType"
-    nodeTypeValue.Value = nodeType
-    nodeTypeValue.Parent = node
-
-    local harvested = Instance.new("BoolValue")
-    harvested.Name = "Harvested"
-    harvested.Value = false
-    harvested.Parent = node
-
-    local hitsLeft = Instance.new("IntValue")
-    hitsLeft.Name = "HitsLeft"
-    hitsLeft.Value = (ctx.Config.Resources.Hits and ctx.Config.Resources.Hits[nodeType]) or 1
-    hitsLeft.Parent = node
-
-    local prompt = Instance.new("ProximityPrompt")
-    prompt.ActionText = "Harvest"
-    prompt.ObjectText = nodeType
-    prompt.HoldDuration = 0
-    prompt.MaxActivationDistance = 8
-    prompt.Parent = node
-
-    node.Parent = Workspace
-    return node
-end
-
 function WorldService:spawnResourceNodes()
-    table.clear(spawnedPositions)
+    local resources = (ctx.Config and ctx.Config.Resources) or {}
+    local rng = Random.new(worldState.seed + 1)
+    local minSpacing = resources.MinSpacing or 18
+    table.clear(claimedResourceSpots)
 
-    local cfg = ctx.Config
-    local rng = Random.new((terrainState.seed or 42) + 1)
-    local minSpacing = (cfg.Resources and cfg.Resources.MinSpacing) or 18
-
-    for _ = 1, (cfg.Resources.TreeCount or 0) do
-        local pos = reserveGroundPosition(rng, minSpacing)
+    for _ = 1, (resources.TreeCount or 0) do
+        local pos = claimResourcePosition(rng, minSpacing)
         if pos then
-            makeNodePart(
+            createResourceNode(
                 pos + Vector3.new(0, 4, 0),
                 Vector3.new(2.5, 8, 2.5),
                 Color3.fromRGB(40, 32, 28),
                 Enum.Material.Wood,
                 "Tree"
             )
-
             local crown = Instance.new("Part")
+            crown.Name = "TreeCrown"
             crown.Anchored = true
             crown.Shape = Enum.PartType.Ball
             crown.Size = Vector3.new(7, 6, 7)
@@ -432,16 +390,15 @@ function WorldService:spawnResourceNodes()
             crown.Material = Enum.Material.Grass
             crown.CastShadow = false
             crown.CanCollide = false
-            crown.Name = "TreeCrown"
             crown.Parent = Workspace
         end
     end
 
-    for _ = 1, (cfg.Resources.RockCount or 0) do
-        local pos = reserveGroundPosition(rng, minSpacing)
+    for _ = 1, (resources.RockCount or 0) do
+        local pos = claimResourcePosition(rng, minSpacing)
         if pos then
             local size = rng:NextNumber(2, 4)
-            makeNodePart(
+            createResourceNode(
                 pos + Vector3.new(0, size * 0.5, 0),
                 Vector3.new(size * 1.4, size, size * 1.2),
                 Color3.fromRGB(56, 48, 44),
@@ -451,10 +408,10 @@ function WorldService:spawnResourceNodes()
         end
     end
 
-    for _ = 1, (cfg.Resources.BushCount or 0) do
-        local pos = reserveGroundPosition(rng, minSpacing)
+    for _ = 1, (resources.BushCount or 0) do
+        local pos = claimResourcePosition(rng, minSpacing)
         if pos then
-            makeNodePart(
+            createResourceNode(
                 pos + Vector3.new(0, 1.2, 0),
                 Vector3.new(3, 2.4, 3),
                 Color3.fromRGB(160, 60, 30),
@@ -464,10 +421,10 @@ function WorldService:spawnResourceNodes()
         end
     end
 
-    for _ = 1, (cfg.Resources.FiberCount or 0) do
-        local pos = reserveGroundPosition(rng, minSpacing)
+    for _ = 1, (resources.FiberCount or 0) do
+        local pos = claimResourcePosition(rng, minSpacing)
         if pos then
-            makeNodePart(
+            createResourceNode(
                 pos + Vector3.new(0, 0.6, 0),
                 Vector3.new(3.5, 1.2, 3.5),
                 Color3.fromRGB(130, 120, 90),
@@ -482,7 +439,6 @@ end
 
 function WorldService:spawnCampfire(position)
     local grounded = self:snapToGround(position, 0.5, false)
-
     local campfire = Instance.new("Part")
     campfire.Name = "Campfire"
     campfire.Anchored = true
@@ -501,7 +457,6 @@ function WorldService:spawnCampfire(position)
     local fuel = Instance.new("IntValue", campfire)
     fuel.Name = "Fuel"
     fuel.Value = 100
-
     campfire.Parent = Workspace
     return campfire
 end
@@ -542,9 +497,9 @@ function WorldService:spawnBedroll(position, ownerUserId)
     isBedroll.Name = "IsBedroll"
     isBedroll.Value = true
 
-    local ownerVal = Instance.new("StringValue", frame)
-    ownerVal.Name = "Owner"
-    ownerVal.Value = tostring(ownerUserId or "")
+    local owner = Instance.new("StringValue", frame)
+    owner.Name = "Owner"
+    owner.Value = tostring(ownerUserId or "")
 
     local cooldown = Instance.new("BoolValue", frame)
     cooldown.Name = "Cooldown"
@@ -568,25 +523,23 @@ function WorldService:init(context)
     self:generateTerrain()
     self:spawnResourceNodes()
 
-    local starterCampfirePos = self:sampleGroundPosition({
-        minRadius = 20,
+    local starterCampfire = self:sampleGroundPosition({
+        minRadius = 18,
         maxRadius = 65,
-        excludeLava = true,
         attempts = 30,
     }) or Vector3.new(0, 2, 20)
-    self:spawnCampfire(starterCampfirePos)
+    self:spawnCampfire(starterCampfire)
 
     print("[WorldService] World generated")
 end
 
 function WorldService:tick(dt)
-    local worldCfg = getWorldConfig()
+    local cfg = getWorldConfig()
     dayTimer = dayTimer + dt
 
-    if dayTimer >= worldCfg.dayLength then
-        dayTimer = dayTimer - worldCfg.dayLength
+    if dayTimer >= cfg.dayLength then
+        dayTimer = dayTimer - cfg.dayLength
         day = day + 1
-
         for _, obj in ipairs(Workspace:GetDescendants()) do
             if obj:IsA("BoolValue") and obj.Name == "Cooldown" then
                 obj.Value = false
@@ -594,28 +547,28 @@ function WorldService:tick(dt)
         end
     end
 
-    local fraction = dayTimer / worldCfg.dayLength
+    local fraction = dayTimer / cfg.dayLength
     local clockTime = fraction * 24
     Lighting.ClockTime = clockTime
 
-    local isNightNow = clockTime >= worldCfg.nightStart or clockTime < worldCfg.nightEnd
-    local targetBrightness = isNightNow and 0.4 or 1.8
+    local nightNow = clockTime >= cfg.nightStart or clockTime < cfg.nightEnd
+    local targetBrightness = nightNow and 0.4 or 1.8
     Lighting.Brightness = Lighting.Brightness + (targetBrightness - Lighting.Brightness) * dt * 0.5
 
     if math.floor(dayTimer) % 2 == 0 then
         for _, player in ipairs(Players:GetPlayers()) do
-            ctx.Remotes.DayNightUpdate:FireClient(player, { day = day, isNight = isNightNow })
+            ctx.Remotes.DayNightUpdate:FireClient(player, { day = day, isNight = nightNow })
         end
     end
 
     for _, obj in ipairs(Workspace:GetChildren()) do
         if obj:IsA("BasePart") and obj:FindFirstChild("IsCampfire") then
-            local campfirePos = obj.Position
+            local campPos = obj.Position
             for _, player in ipairs(Players:GetPlayers()) do
-                local character = player.Character
-                local root = character and character:FindFirstChild("HumanoidRootPart")
+                local char = player.Character
+                local root = char and char:FindFirstChild("HumanoidRootPart")
                 if root then
-                    local dist = (root.Position - campfirePos).Magnitude
+                    local dist = (root.Position - campPos).Magnitude
                     if dist <= ((ctx.Config.Vitals and ctx.Config.Vitals.CampfireWarmRadius) or 18) then
                         if ctx.VitalsService and ctx.VitalsService.adjustTemperature then
                             ctx.VitalsService:adjustTemperature(
@@ -639,9 +592,9 @@ function WorldService:getDayTimer()
 end
 
 function WorldService:isNight()
-    local worldCfg = getWorldConfig()
-    local clock = Lighting.ClockTime
-    return clock >= worldCfg.nightStart or clock < worldCfg.nightEnd
+    local cfg = getWorldConfig()
+    local t = Lighting.ClockTime
+    return t >= cfg.nightStart or t < cfg.nightEnd
 end
 
 function WorldService:isRaining()
@@ -649,10 +602,10 @@ function WorldService:isRaining()
 end
 
 function WorldService:skipToMorning()
-    local worldCfg = getWorldConfig()
-    local dawn = (worldCfg.nightEnd / 24) * worldCfg.dayLength
+    local cfg = getWorldConfig()
+    local dawn = (cfg.nightEnd / 24) * cfg.dayLength
     dayTimer = dawn + 1
-    Lighting.ClockTime = worldCfg.nightEnd + 0.1
+    Lighting.ClockTime = cfg.nightEnd + 0.1
 end
 
 return WorldService
