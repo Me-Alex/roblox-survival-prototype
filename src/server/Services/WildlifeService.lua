@@ -40,6 +40,11 @@ local rootToEntry = {}
 
 local RNG = Random.new()
 
+local function randomHorizontalUnit()
+    local angle = RNG:NextNumber(0, math.pi * 2)
+    return Vector3.new(math.cos(angle), 0, math.sin(angle))
+end
+
 -- ── Model builders ─────────────────────────────────────────────────────────
 
 local function anchoredPart(parent, name, size, cf, color, material)
@@ -162,13 +167,27 @@ end
 -- ── Spawn helpers ──────────────────────────────────────────────────────────
 
 local function randomIslandPos()
-    -- Keep animals away from the volcano centre (radius < 120)
-    -- and away from the ocean edge (radius > 380)
+    if ctx and ctx.WorldService and ctx.WorldService.sampleGroundPosition then
+        local pos = ctx.WorldService:sampleGroundPosition({
+            rng = RNG,
+            minRadius = 130,
+            maxRadius = 360,
+            avoidRadius = 100,
+            excludeLava = true,
+            minHeight = 0.5,
+            edgePadding = 40,
+            attempts = 60,
+        })
+        if pos then
+            return pos
+        end
+    end
+
     for _ = 1, 30 do
         local angle = RNG:NextNumber(0, math.pi * 2)
-        local r     = RNG:NextNumber(130, 360)
-        local x     = math.cos(angle) * r
-        local z     = math.sin(angle) * r
+        local r = RNG:NextNumber(130, 360)
+        local x = math.cos(angle) * r
+        local z = math.sin(angle) * r
         return Vector3.new(x, 5, z)
     end
     return Vector3.new(150, 5, 150)
@@ -193,7 +212,7 @@ local function spawnAnimal(kind)
         maxHealth     = cfg.Health,
         state         = "IDLE",
         wanderTimer   = RNG:NextNumber(2, 5),
-        wanderDir     = Vector3.new(RNG:NextNumber(-1,1), 0, RNG:NextNumber(-1,1)).Unit,
+        wanderDir     = randomHorizontalUnit(),
         fleeTimer     = 0,
         damageCooldown= 0,
         killer        = nil,
@@ -213,19 +232,28 @@ local function moveModel(entry, delta)
     if not root or not root.Parent then return end
 
     -- Clamp to island radius
-    local pos  = root.Position + delta
-    local r2d  = math.sqrt(pos.X*pos.X + pos.Z*pos.Z)
+    local pos = root.Position + delta
+    local r2d = math.sqrt(pos.X * pos.X + pos.Z * pos.Z)
     if r2d > 370 then
-        -- Bounce back toward centre
-        entry.wanderDir = (Vector3.new(0,0,0) - pos).Unit
-        entry.wanderDir = Vector3.new(entry.wanderDir.X, 0, entry.wanderDir.Z)
+        local towardCenter = Vector3.new(-pos.X, 0, -pos.Z)
+        if towardCenter.Magnitude > 0.01 then
+            entry.wanderDir = towardCenter.Unit
+        else
+            entry.wanderDir = randomHorizontalUnit()
+        end
         return
     end
 
+    local targetY = pos.Y
+    if ctx and ctx.WorldService and ctx.WorldService.getTerrainHeightAt then
+        targetY = ctx.WorldService:getTerrainHeightAt(pos.X, pos.Z) + 0.05
+    end
+
     local model = entry.model
+    local worldDelta = Vector3.new(delta.X, targetY - root.Position.Y, delta.Z)
     for _, part in ipairs(model:GetDescendants()) do
         if part:IsA("BasePart") then
-            part.CFrame = part.CFrame + delta
+            part.CFrame = part.CFrame + worldDelta
         end
     end
 end

@@ -150,8 +150,12 @@ function StoneOvenService:init(context)
 
         -- Place 5 studs in front of the player
         local forward = root.CFrame.LookVector
-        local pos     = root.Position + forward * 5
-        pos = Vector3.new(pos.X, 1, pos.Z)  -- snap to ground level
+        local pos = root.Position + forward * 5
+        if ctx.WorldService and ctx.WorldService.snapToGround then
+            pos = ctx.WorldService:snapToGround(pos, 0, false)
+        else
+            pos = Vector3.new(pos.X, 1, pos.Z)
+        end
 
         -- Remove item from inventory
         ctx.InventoryService:removeItem(player, "StoneOven", 1)

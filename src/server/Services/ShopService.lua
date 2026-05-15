@@ -205,7 +205,7 @@ end
 local function createShopStand(shopId, shopConfig, position)
 	local terrainY = position.Y
 	if context and context.WorldService and context.WorldService.getTerrainHeightAt then
-		terrainY = context.WorldService.getTerrainHeightAt(position.X, position.Z)
+		terrainY = context.WorldService:getTerrainHeightAt(position.X, position.Z)
 	end
 
 	local baseCFrame = CFrame.new(position.X, terrainY + 0.3, position.Z)

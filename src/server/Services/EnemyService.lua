@@ -93,11 +93,26 @@ local function spawnStalker()
     local cfg    = ctx.Config.Combat.NightStalker
     if #stalkers >= cfg.MaxCount then return end
 
-    local angle  = Random:NextNumber(0, math.pi * 2)
-    local r      = cfg.SpawnRadius
-    local x      = math.cos(angle) * r
-    local z      = math.sin(angle) * r
-    local pos    = Vector3.new(x, 6, z)
+    local pos
+    if ctx.WorldService and ctx.WorldService.sampleGroundPosition then
+        pos = ctx.WorldService:sampleGroundPosition({
+            rng = Random,
+            minRadius = math.max(160, (cfg.SpawnRadius or 220) - 24),
+            maxRadius = math.max(170, (cfg.SpawnRadius or 220) + 42),
+            excludeLava = true,
+            minHeight = 0.5,
+            edgePadding = 14,
+            attempts = 40,
+        })
+    end
+
+    if not pos then
+        local angle  = Random:NextNumber(0, math.pi * 2)
+        local r      = cfg.SpawnRadius
+        local x      = math.cos(angle) * r
+        local z      = math.sin(angle) * r
+        pos = Vector3.new(x, 6, z)
+    end
 
     local model, hum, root = buildStalker(pos)
 
@@ -184,8 +199,11 @@ local function stepToward(stalkerEntry, targetPos, dt)
     local step  = math.min(speed * dt, dist)
     local newPos = currentPos + direction.Unit * step
 
-    -- Keep Y at 6 (float above terrain)
-    newPos = Vector3.new(newPos.X, 6, newPos.Z)
+    if ctx.WorldService and ctx.WorldService.getTerrainHeightAt then
+        newPos = Vector3.new(newPos.X, ctx.WorldService:getTerrainHeightAt(newPos.X, newPos.Z) + 2, newPos.Z)
+    else
+        newPos = Vector3.new(newPos.X, 6, newPos.Z)
+    end
     root.CFrame = CFrame.new(newPos, Vector3.new(targetPos.X, newPos.Y, targetPos.Z))
 
     -- Sync eye positions

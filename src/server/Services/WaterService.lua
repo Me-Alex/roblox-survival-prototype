@@ -24,7 +24,6 @@
 --   transparent and cannot be used again until RespawnTime seconds pass,
 --   then it fully reappears.
 
-local Players   = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 
 local WaterService = {}
@@ -33,6 +32,7 @@ local ctx
 -- Table of puddle entries
 -- { model, disc, prompt, cooldown (seconds left, 0 = ready) }
 local puddles = {}
+local puddlePositions = {}
 
 local PUDDLE_COUNT   = 20
 local REFILL_TIME    = 45   -- seconds before puddle refills
@@ -89,16 +89,51 @@ end
 
 -- ── Spawn helpers ─────────────────────────────────────────────────────────
 
+local function tooCloseToExisting(position, minDistance)
+    for _, existing in ipairs(puddlePositions) do
+        if (existing - position).Magnitude < minDistance then
+            return true
+        end
+    end
+    return false
+end
+
 local function randomPuddlePos()
-    -- Spread across mid-island zones; avoid volcano centre and ocean edge
+    if ctx and ctx.WorldService and ctx.WorldService.sampleGroundPosition then
+        for _ = 1, 60 do
+            local pos = ctx.WorldService:sampleGroundPosition({
+                rng = RNG,
+                minRadius = 105,
+                maxRadius = 360,
+                avoidRadius = 90,
+                excludeLava = true,
+                minHeight = 0.5,
+                maxHeight = 14,
+                edgePadding = 36,
+                attempts = 1,
+            })
+            if pos and not tooCloseToExisting(pos, 22) then
+                table.insert(puddlePositions, pos)
+                return pos + Vector3.new(0, 0.1, 0)
+            end
+        end
+    end
+
     for _ = 1, 30 do
         local angle = RNG:NextNumber(0, math.pi * 2)
-        local r     = RNG:NextNumber(100, 350)
-        local x     = math.cos(angle) * r
-        local z     = math.sin(angle) * r
-        return Vector3.new(x, 2, z)
+        local r = RNG:NextNumber(100, 350)
+        local x = math.cos(angle) * r
+        local z = math.sin(angle) * r
+        local fallback = Vector3.new(x, 2, z)
+        if not tooCloseToExisting(fallback, 22) then
+            table.insert(puddlePositions, fallback)
+            return fallback
+        end
     end
-    return Vector3.new(200, 2, 100)
+
+    local fallback = Vector3.new(200, 2, 100)
+    table.insert(puddlePositions, fallback)
+    return fallback
 end
 
 local function spawnPuddle()
@@ -145,6 +180,7 @@ end
 
 function WaterService:init(context)
     ctx = context
+    table.clear(puddlePositions)
 
     for _ = 1, PUDDLE_COUNT do
         spawnPuddle()

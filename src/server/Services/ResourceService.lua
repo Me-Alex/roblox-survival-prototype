@@ -180,7 +180,12 @@ function ResourceService:placeStructure(player, structureId, position)
         return
     end
 
-    local safePos = Vector3.new(position.X, math.max(1, position.Y), position.Z)
+    local safePos
+    if ctx.WorldService and ctx.WorldService.snapToGround then
+        safePos = ctx.WorldService:snapToGround(position, 0.5, false)
+    else
+        safePos = Vector3.new(position.X, math.max(1, position.Y), position.Z)
+    end
 
     if structureId == "CampfireKit" then
         if not ctx.InventoryService:hasItem(player, "CampfireKit", 1) then

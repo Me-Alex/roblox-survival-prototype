@@ -1,41 +1,130 @@
--- WorldService.lua  (Milestone 6a)
--- Changes from Milestone 2:
---   • spawnBedroll(position) builds a visible bedroll model and attaches
---     a ProximityPrompt tagged IsBedroll=true so SleepService can detect it.
---   • isRaining() stub added (returns false until weather system is wired up).
+local Lighting = game:GetService("Lighting")
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
 
-local Lighting   = game:GetService("Lighting")
-local Workspace  = game:GetService("Workspace")
+local WorldService = { _isWorldService = true }
 
-local WorldService = {}
 local ctx
 local dayTimer = 0
-local day      = 1
+local day = 1
+local spawnedPositions = {}
 
--- ── Public init ───────────────────────────────────────────────────────────
+local terrainState = {
+    seed = 42,
+    halfSize = 600,
+    islandRadius = 540,
+    lavaCoreRadius = 48,
+    lavaRimRadius = 96,
+    beachInnerRadius = 500,
+    step = 24,
+    oceanFloorY = -160,
+    oceanSurfaceY = 0,
+}
 
-function WorldService:init(context)
-    ctx = context
-    self:setupLighting()
-    self:generateTerrain()
-    self:spawnResourceNodes()
-    self:spawnCampfire(Vector3.new(0, 2, 20))
-    print("[WorldService] World generated")
+local function lerp(a, b, t)
+    return a + (b - a) * t
 end
 
--- ── Lighting ─────────────────────────────────────────────────────────────
+local function getWorldConfig()
+    local worldCfg = (ctx and ctx.Config and ctx.Config.World) or {}
+    local halfSize = tonumber(worldCfg.HalfSize or worldCfg.SpawnAreaHalfSize) or 600
+    halfSize = math.max(200, halfSize)
+
+    local seed = tonumber(worldCfg.Seed) or 42
+    local dayLength = tonumber(worldCfg.DayLengthSecs or worldCfg.DayLengthSeconds) or 480
+    local nightStart = tonumber(worldCfg.NightStartClock or worldCfg.NightStart) or 19
+    local nightEnd = tonumber(worldCfg.NightEndClock or worldCfg.NightEnd) or 6
+
+    local spawnPoint = worldCfg.SpawnPoint
+    if typeof(spawnPoint) ~= "Vector3" then
+        spawnPoint = Vector3.new(0, 0, 24)
+    end
+
+    return {
+        seed = seed,
+        halfSize = halfSize,
+        dayLength = math.max(60, dayLength),
+        nightStart = nightStart,
+        nightEnd = nightEnd,
+        spawnPoint = spawnPoint,
+    }
+end
+
+local function surfaceProfileAt(x, z)
+    local dist = math.sqrt(x * x + z * z)
+    if dist > terrainState.islandRadius then
+        return nil
+    end
+
+    local normalized = dist / terrainState.islandRadius
+    local radialHeight = 46 * (1 - normalized ^ 1.35) + 1.2
+
+    local n1 = math.noise((x + terrainState.seed * 0.11) / 150, (z - terrainState.seed * 0.17) / 150, terrainState.seed * 0.001)
+    local n2 = math.noise((x - terrainState.seed * 0.29) / 60, (z + terrainState.seed * 0.07) / 60, terrainState.seed * 0.002)
+    local height = radialHeight + n1 * 7 + n2 * 3
+
+    if dist < terrainState.lavaCoreRadius then
+        height = math.min(height, 2.4)
+    elseif dist < terrainState.lavaRimRadius then
+        local rimAlpha = (dist - terrainState.lavaCoreRadius) / (terrainState.lavaRimRadius - terrainState.lavaCoreRadius)
+        local rimHeight = 23 + rimAlpha * 12
+        height = math.max(height, rimHeight + n2 * 1.2)
+    end
+
+    if dist > terrainState.beachInnerRadius then
+        local beachAlpha = math.clamp(
+            (dist - terrainState.beachInnerRadius) / (terrainState.islandRadius - terrainState.beachInnerRadius),
+            0,
+            1
+        )
+        local beachHeight = lerp(3.2, 0.7, beachAlpha)
+        height = math.min(height, beachHeight + n2 * 0.5)
+    end
+
+    height = math.clamp(height, 0.35, 58)
+
+    local material
+    if dist < terrainState.lavaCoreRadius + 3 then
+        material = Enum.Material.Basalt
+    elseif dist < terrainState.lavaRimRadius then
+        material = Enum.Material.Basalt
+    elseif normalized < 0.55 then
+        material = Enum.Material.Slate
+    elseif normalized < 0.85 then
+        material = Enum.Material.Rock
+    else
+        material = Enum.Material.Sand
+    end
+
+    return {
+        height = height,
+        material = material,
+        dist = dist,
+    }
+end
+
+local function isLavaZone(x, z)
+    local dist = math.sqrt(x * x + z * z)
+    return dist < (terrainState.lavaCoreRadius + 6)
+end
+
+local function isInsideIsland(x, z, padding)
+    padding = padding or 0
+    local dist = math.sqrt(x * x + z * z)
+    return dist <= (terrainState.islandRadius - padding)
+end
 
 function WorldService:setupLighting()
-    Lighting.ClockTime         = 9
-    Lighting.Brightness        = 1.8
-    Lighting.GlobalShadows     = true
-    Lighting.Ambient           = Color3.fromRGB(58, 44, 34)
-    Lighting.OutdoorAmbient    = Color3.fromRGB(94, 72, 52)
-    Lighting.ColorShift_Top    = Color3.fromRGB(255, 178, 88)
+    Lighting.ClockTime = 9
+    Lighting.Brightness = 1.8
+    Lighting.GlobalShadows = true
+    Lighting.Ambient = Color3.fromRGB(58, 44, 34)
+    Lighting.OutdoorAmbient = Color3.fromRGB(94, 72, 52)
+    Lighting.ColorShift_Top = Color3.fromRGB(255, 178, 88)
     Lighting.ColorShift_Bottom = Color3.fromRGB(64, 44, 36)
-    Lighting.FogEnd            = 1400
-    Lighting.FogStart          = 600
-    Lighting.FogColor          = Color3.fromRGB(140, 100, 60)
+    Lighting.FogEnd = 1400
+    Lighting.FogStart = 600
+    Lighting.FogColor = Color3.fromRGB(140, 100, 60)
 
     local atmo = Lighting:FindFirstChild("Atmosphere") or Instance.new("Atmosphere")
     atmo.Name = "Atmosphere"
@@ -62,10 +151,22 @@ function WorldService:setupLighting()
     cc.Parent = Lighting
 end
 
--- ── Terrain generation ────────────────────────────────────────────────────
-
 function WorldService:generateTerrain()
-    if Workspace:FindFirstChild("_TerrainGenDone") then return end
+    if Workspace:FindFirstChild("_TerrainGenDone") then
+        return
+    end
+
+    local worldCfg = getWorldConfig()
+    terrainState.seed = worldCfg.seed
+    terrainState.halfSize = worldCfg.halfSize
+    terrainState.islandRadius = math.max(140, worldCfg.halfSize - 62)
+    terrainState.lavaCoreRadius = math.clamp(terrainState.islandRadius * 0.088, 40, 68)
+    terrainState.lavaRimRadius = math.clamp(terrainState.islandRadius * 0.178, terrainState.lavaCoreRadius + 22, 130)
+    terrainState.beachInnerRadius = math.max(terrainState.lavaRimRadius + 80, terrainState.islandRadius - 36)
+    terrainState.step = 24
+    terrainState.oceanFloorY = -160
+    terrainState.oceanSurfaceY = 0
+
     local marker = Instance.new("BoolValue")
     marker.Name = "_TerrainGenDone"
     marker.Parent = Workspace
@@ -73,121 +174,175 @@ function WorldService:generateTerrain()
     local terrain = Workspace.Terrain
     terrain:Clear()
 
-    local cfg   = ctx.Config.World
-    local half  = cfg.HalfSize
-    local step  = 24
-    local rng   = Random.new(cfg.Seed)
-
+    local oceanDepth = terrainState.oceanSurfaceY - terrainState.oceanFloorY
     terrain:FillBlock(
-        CFrame.new(0, -80, 0),
-        Vector3.new(half * 4, 60, half * 4),
+        CFrame.new(0, terrainState.oceanFloorY + oceanDepth * 0.5, 0),
+        Vector3.new(terrainState.halfSize * 4, oceanDepth, terrainState.halfSize * 4),
         Enum.Material.Water
     )
 
-    local islandRadius = half - 60
+    for x = -terrainState.halfSize, terrainState.halfSize, terrainState.step do
+        for z = -terrainState.halfSize, terrainState.halfSize, terrainState.step do
+            local profile = surfaceProfileAt(x, z)
+            if profile then
+                local thickness = profile.height - terrainState.oceanFloorY
+                terrain:FillBlock(
+                    CFrame.new(x, terrainState.oceanFloorY + thickness * 0.5, z),
+                    Vector3.new(terrainState.step, thickness, terrainState.step),
+                    profile.material
+                )
 
-    for x = -half, half, step do
-        for z = -half, half, step do
-            local dist2 = x*x + z*z
-            if dist2 <= islandRadius * islandRadius then
-                local normalised = math.sqrt(dist2) / islandRadius
-                local baseH = math.lerp(40, 2, normalised)
-                local noise = rng:NextNumber(-4, 6)
-                local height = math.max(2, baseH + noise)
-
-                local mat
-                if normalised < 0.2 then
-                    mat = Enum.Material.Basalt
-                elseif normalised < 0.6 then
-                    mat = Enum.Material.Slate
-                elseif normalised < 0.85 then
-                    mat = Enum.Material.Rock
-                else
-                    mat = Enum.Material.Sand
+                if profile.dist < (terrainState.lavaCoreRadius - 4) then
+                    terrain:FillBlock(
+                        CFrame.new(x, profile.height + 0.6, z),
+                        Vector3.new(terrainState.step, 1.2, terrainState.step),
+                        Enum.Material.Neon
+                    )
                 end
-
-                terrain:FillBlock(
-                    CFrame.new(x, -height/2, z),
-                    Vector3.new(step, height, step),
-                    mat
-                )
             end
         end
     end
 
-    local caldRadius = 90
-    for x = -caldRadius, caldRadius, step do
-        for z = -caldRadius, caldRadius, step do
-            local r = math.sqrt(x*x + z*z)
-            if r >= 50 and r <= caldRadius then
-                terrain:FillBlock(
-                    CFrame.new(x, 20, z),
-                    Vector3.new(step, 44, step),
-                    Enum.Material.Basalt
-                )
-            elseif r < 50 then
-                terrain:FillBlock(
-                    CFrame.new(x, 2, z),
-                    Vector3.new(step, 4, step),
-                    Enum.Material.Neon
-                )
-            end
-        end
-    end
-
-    local beachOuter = islandRadius + 20
-    local beachInner = islandRadius - 10
-    for x = -beachOuter, beachOuter, step do
-        for z = -beachOuter, beachOuter, step do
-            local r = math.sqrt(x*x + z*z)
-            if r >= beachInner and r <= beachOuter then
-                terrain:FillBlock(
-                    CFrame.new(x, -0.5, z),
-                    Vector3.new(step, 1, step),
-                    Enum.Material.Sand
-                )
-            end
-        end
-    end
-
-    terrain:FillBlock(
-        CFrame.new(0, 0, 0),
-        Vector3.new(80, 4, 80),
-        Enum.Material.Slate
-    )
-
-    if not Workspace:FindFirstChild("SurvivalSpawn") then
-        local spawn = Instance.new("SpawnLocation")
+    local spawnY = self:getTerrainHeightAt(worldCfg.spawnPoint.X, worldCfg.spawnPoint.Z)
+    local spawn = Workspace:FindFirstChild("SurvivalSpawn")
+    if not spawn then
+        spawn = Instance.new("SpawnLocation")
         spawn.Name = "SurvivalSpawn"
         spawn.Anchored = true
         spawn.Size = Vector3.new(10, 1, 10)
-        spawn.CFrame = CFrame.new(0, 2, 0)
         spawn.Color = Color3.fromRGB(88, 72, 52)
         spawn.Material = Enum.Material.Cobblestone
         spawn.Parent = Workspace
     end
+    spawn.CFrame = CFrame.new(worldCfg.spawnPoint.X, spawnY + 1.1, worldCfg.spawnPoint.Z)
 end
 
--- ── Resource node spawning ────────────────────────────────────────────────
+function WorldService.getTerrainHeightAt(a, b, c)
+    local x, z
+    if type(a) == "table" and a._isWorldService then
+        x, z = b, c
+    else
+        x, z = a, b
+    end
 
-local spawnedPositions = {}
+    x = tonumber(x) or 0
+    z = tonumber(z) or 0
+
+    local profile = surfaceProfileAt(x, z)
+    if profile then
+        return profile.height
+    end
+    return terrainState.oceanSurfaceY
+end
+
+function WorldService:isLavaAt(x, z)
+    return isLavaZone(tonumber(x) or 0, tonumber(z) or 0)
+end
+
+function WorldService:isInsideIsland(x, z, padding)
+    return isInsideIsland(tonumber(x) or 0, tonumber(z) or 0, padding)
+end
+
+function WorldService:snapToGround(position, heightOffset, allowLava)
+    if typeof(position) ~= "Vector3" then
+        return Vector3.new(0, 1, 0)
+    end
+
+    local y = self:getTerrainHeightAt(position.X, position.Z)
+    local snapped = Vector3.new(position.X, y + (tonumber(heightOffset) or 0), position.Z)
+
+    if allowLava or not self:isLavaAt(position.X, position.Z) then
+        return snapped
+    end
+
+    local fallback = self:sampleGroundPosition({
+        minRadius = terrainState.lavaRimRadius + 18,
+        maxRadius = terrainState.islandRadius - 24,
+        attempts = 24,
+        excludeLava = true,
+        minHeight = terrainState.oceanSurfaceY + 0.5,
+    })
+
+    if fallback then
+        return fallback + Vector3.new(0, tonumber(heightOffset) or 0, 0)
+    end
+    return snapped
+end
+
+function WorldService:sampleGroundPosition(options)
+    options = options or {}
+    local worldRng = options.rng or Random.new(terrainState.seed + 13)
+
+    local minRadius = math.max(0, tonumber(options.minRadius) or 0)
+    local maxRadius = tonumber(options.maxRadius) or (terrainState.islandRadius - 20)
+    maxRadius = math.min(maxRadius, terrainState.islandRadius - (tonumber(options.edgePadding) or 20))
+    if maxRadius <= minRadius then
+        return nil
+    end
+
+    local avoidRadius = math.max(0, tonumber(options.avoidRadius) or 0)
+    local attempts = math.max(1, tonumber(options.attempts) or 48)
+    local minHeight = tonumber(options.minHeight) or -math.huge
+    local maxHeight = tonumber(options.maxHeight) or math.huge
+    local center = options.center
+    local centerX = (typeof(center) == "Vector3" and center.X) or 0
+    local centerZ = (typeof(center) == "Vector3" and center.Z) or 0
+
+    for _ = 1, attempts do
+        local angle = worldRng:NextNumber(0, math.pi * 2)
+        local radius = math.sqrt(worldRng:NextNumber(minRadius * minRadius, maxRadius * maxRadius))
+        local x = centerX + math.cos(angle) * radius
+        local z = centerZ + math.sin(angle) * radius
+
+        if not isInsideIsland(x, z, tonumber(options.edgePadding) or 20) then
+            continue
+        end
+
+        if avoidRadius > 0 and (x * x + z * z) < (avoidRadius * avoidRadius) then
+            continue
+        end
+
+        if options.excludeLava and isLavaZone(x, z) then
+            continue
+        end
+
+        local y = self:getTerrainHeightAt(x, z)
+        if y < minHeight or y > maxHeight then
+            continue
+        end
+
+        if options.requireDry ~= false and y <= terrainState.oceanSurfaceY + 0.05 then
+            continue
+        end
+
+        return Vector3.new(x, y, z)
+    end
+
+    return nil
+end
 
 local function tooClose(pos, minDist)
-    for _, p in ipairs(spawnedPositions) do
-        if (pos - p).Magnitude < minDist then return true end
+    for _, existing in ipairs(spawnedPositions) do
+        if (pos - existing).Magnitude < minDist then
+            return true
+        end
     end
     return false
 end
 
-local function safePosition(rng, halfRange, minDist, clearRadius)
-    clearRadius = clearRadius or 50
-    for _ = 1, 40 do
-        local x = rng:NextNumber(-halfRange, halfRange)
-        local z = rng:NextNumber(-halfRange, halfRange)
-        local pos = Vector3.new(x, 4, z)
-        if math.sqrt(x*x + z*z) < clearRadius then continue end
-        if math.sqrt(x*x + z*z) < 120 then continue end
-        if not tooClose(pos, minDist) then
+local function reserveGroundPosition(rng, minDist)
+    for _ = 1, 80 do
+        local pos = WorldService:sampleGroundPosition({
+            rng = rng,
+            minRadius = terrainState.lavaRimRadius + 24,
+            maxRadius = terrainState.islandRadius - 40,
+            avoidRadius = terrainState.lavaRimRadius + 8,
+            excludeLava = true,
+            minHeight = terrainState.oceanSurfaceY + 0.8,
+            attempts = 1,
+            edgePadding = 28,
+        })
+        if pos and not tooClose(pos, minDist) then
             table.insert(spawnedPositions, pos)
             return pos
         end
@@ -196,58 +351,67 @@ local function safePosition(rng, halfRange, minDist, clearRadius)
 end
 
 local function makeNodePart(pos, size, color, material, nodeType)
-    local p = Instance.new("Part")
-    p.Anchored       = true
-    p.Size           = size
-    p.CFrame         = CFrame.new(pos)
-    p.Color          = color
-    p.Material       = material
-    p.CastShadow     = true
-    p.Name           = nodeType .. "Node"
+    local node = Instance.new("Part")
+    node.Anchored = true
+    node.Size = size
+    node.CFrame = CFrame.new(pos)
+    node.Color = color
+    node.Material = material
+    node.CastShadow = true
+    node.Name = nodeType .. "Node"
 
-    local nt = Instance.new("StringValue")
-    nt.Name  = "NodeType"
-    nt.Value = nodeType
-    nt.Parent = p
+    local nodeTypeValue = Instance.new("StringValue")
+    nodeTypeValue.Name = "NodeType"
+    nodeTypeValue.Value = nodeType
+    nodeTypeValue.Parent = node
 
     local harvested = Instance.new("BoolValue")
-    harvested.Name  = "Harvested"
+    harvested.Name = "Harvested"
     harvested.Value = false
-    harvested.Parent = p
+    harvested.Parent = node
 
     local hitsLeft = Instance.new("IntValue")
-    hitsLeft.Name  = "HitsLeft"
-    hitsLeft.Value = ctx.Config.Resources.Hits[nodeType] or 1
-    hitsLeft.Parent = p
+    hitsLeft.Name = "HitsLeft"
+    hitsLeft.Value = (ctx.Config.Resources.Hits and ctx.Config.Resources.Hits[nodeType]) or 1
+    hitsLeft.Parent = node
 
     local prompt = Instance.new("ProximityPrompt")
-    prompt.ActionText    = "Harvest"
-    prompt.ObjectText    = nodeType
-    prompt.HoldDuration  = 0
+    prompt.ActionText = "Harvest"
+    prompt.ObjectText = nodeType
+    prompt.HoldDuration = 0
     prompt.MaxActivationDistance = 8
-    prompt.Parent = p
+    prompt.Parent = node
 
-    p.Parent = Workspace
-    return p
+    node.Parent = Workspace
+    return node
 end
 
 function WorldService:spawnResourceNodes()
-    if Workspace:FindFirstChild("_ResourcesDone") then return end
+    if Workspace:FindFirstChild("_ResourcesDone") then
+        return
+    end
+
     local marker = Instance.new("BoolValue")
     marker.Name = "_ResourcesDone"
     marker.Parent = Workspace
 
-    local cfg  = ctx.Config
-    local rng  = Random.new(cfg.World.Seed + 1)
-    local half = cfg.World.HalfSize - 80
-    local minD = cfg.Resources.MinSpacing
+    table.clear(spawnedPositions)
 
-    for _ = 1, cfg.Resources.TreeCount do
-        local pos = safePosition(rng, half, minD)
+    local cfg = ctx.Config
+    local rng = Random.new((terrainState.seed or 42) + 1)
+    local minSpacing = (cfg.Resources and cfg.Resources.MinSpacing) or 18
+
+    for _ = 1, (cfg.Resources.TreeCount or 0) do
+        local pos = reserveGroundPosition(rng, minSpacing)
         if pos then
-            makeNodePart(pos + Vector3.new(0, 4, 0),
+            makeNodePart(
+                pos + Vector3.new(0, 4, 0),
                 Vector3.new(2.5, 8, 2.5),
-                Color3.fromRGB(40, 32, 28), Enum.Material.Wood, "Tree")
+                Color3.fromRGB(40, 32, 28),
+                Enum.Material.Wood,
+                "Tree"
+            )
+
             local crown = Instance.new("Part")
             crown.Anchored = true
             crown.Shape = Enum.PartType.Ball
@@ -262,181 +426,192 @@ function WorldService:spawnResourceNodes()
         end
     end
 
-    for _ = 1, cfg.Resources.RockCount do
-        local pos = safePosition(rng, half, minD)
+    for _ = 1, (cfg.Resources.RockCount or 0) do
+        local pos = reserveGroundPosition(rng, minSpacing)
         if pos then
-            local sz = rng:NextNumber(2, 4)
-            makeNodePart(pos + Vector3.new(0, sz/2, 0),
-                Vector3.new(sz*1.4, sz, sz*1.2),
-                Color3.fromRGB(56, 48, 44), Enum.Material.Basalt, "Rock")
+            local size = rng:NextNumber(2, 4)
+            makeNodePart(
+                pos + Vector3.new(0, size * 0.5, 0),
+                Vector3.new(size * 1.4, size, size * 1.2),
+                Color3.fromRGB(56, 48, 44),
+                Enum.Material.Basalt,
+                "Rock"
+            )
         end
     end
 
-    for _ = 1, cfg.Resources.BushCount do
-        local pos = safePosition(rng, half, minD)
+    for _ = 1, (cfg.Resources.BushCount or 0) do
+        local pos = reserveGroundPosition(rng, minSpacing)
         if pos then
-            makeNodePart(pos + Vector3.new(0, 1.2, 0),
+            makeNodePart(
+                pos + Vector3.new(0, 1.2, 0),
                 Vector3.new(3, 2.4, 3),
-                Color3.fromRGB(160, 60, 30), Enum.Material.Grass, "Bush")
+                Color3.fromRGB(160, 60, 30),
+                Enum.Material.Grass,
+                "Bush"
+            )
         end
     end
 
-    for _ = 1, cfg.Resources.FiberCount do
-        local pos = safePosition(rng, half, minD)
+    for _ = 1, (cfg.Resources.FiberCount or 0) do
+        local pos = reserveGroundPosition(rng, minSpacing)
         if pos then
-            makeNodePart(pos + Vector3.new(0, 0.6, 0),
+            makeNodePart(
+                pos + Vector3.new(0, 0.6, 0),
                 Vector3.new(3.5, 1.2, 3.5),
-                Color3.fromRGB(130, 120, 90), Enum.Material.LeafyGrass, "Fiber")
+                Color3.fromRGB(130, 120, 90),
+                Enum.Material.LeafyGrass,
+                "Fiber"
+            )
         end
     end
 
     print("[WorldService] Resource nodes spawned")
 end
 
--- ── Campfire ──────────────────────────────────────────────────────────────
-
 function WorldService:spawnCampfire(position)
-    local cf = Instance.new("Part")
-    cf.Name = "Campfire"
-    cf.Anchored = true
-    cf.Size = Vector3.new(3, 1, 3)
-    cf.CFrame = CFrame.new(position)
-    cf.Color = Color3.fromRGB(180, 90, 20)
-    cf.Material = Enum.Material.Neon
+    local grounded = self:snapToGround(position, 0.5, false)
+
+    local campfire = Instance.new("Part")
+    campfire.Name = "Campfire"
+    campfire.Anchored = true
+    campfire.Size = Vector3.new(3, 1, 3)
+    campfire.CFrame = CFrame.new(grounded)
+    campfire.Color = Color3.fromRGB(180, 90, 20)
+    campfire.Material = Enum.Material.Neon
 
     local light = Instance.new("PointLight")
     light.Brightness = 4
-    light.Range = ctx.Config.Vitals.CampfireWarmRadius * 1.5
+    light.Range = ((ctx.Config.Vitals and ctx.Config.Vitals.CampfireWarmRadius) or 18) * 1.5
     light.Color = Color3.fromRGB(255, 160, 60)
-    light.Parent = cf
+    light.Parent = campfire
 
-    Instance.new("BoolValue", cf).Name="IsCampfire"
-    local fuel = Instance.new("IntValue", cf)
+    Instance.new("BoolValue", campfire).Name = "IsCampfire"
+    local fuel = Instance.new("IntValue", campfire)
     fuel.Name = "Fuel"
     fuel.Value = 100
 
-    cf.Parent=Workspace
-    return cf
+    campfire.Parent = Workspace
+    return campfire
 end
 
--- ── Bedroll ───────────────────────────────────────────────────────────────
--- Builds a small visible bedroll from Parts, places it at `position`, and
--- attaches a ProximityPrompt that SleepService (Milestone 6b) will watch.
---
--- MODEL LAYOUT (all Parts anchored, no physics):
---
---   [Frame base]  – a flat dark-wood rectangle  (6 × 0.4 × 3)
---   [Mattress]    – a slightly raised padded slab (5.4 × 0.5 × 2.6)  dark-green
---   [Pillow]      – a small raised block at one end (1.6 × 0.4 × 1.2)  cream
---   [ProximityPrompt] on the Frame, ActionText="Sleep"  HoldDuration=1.5
---   [IsBedroll BoolValue]  – tag so SleepService can find it
---   [Owner StringValue]    – stores player.UserId so only the owner can sleep
---   [Cooldown BoolValue]   – set to true after sleeping, cleared at dawn
-
 function WorldService:spawnBedroll(position, ownerUserId)
-    local folder = Instance.new("Model")
-    folder.Name = "Bedroll"
+    local grounded = self:snapToGround(position, 0, false)
+    local model = Instance.new("Model")
+    model.Name = "Bedroll"
 
-    -- Frame base
     local frame = Instance.new("Part")
-    frame.Name     = "BedrollFrame"
+    frame.Name = "BedrollFrame"
     frame.Anchored = true
-    frame.Size     = Vector3.new(6, 0.4, 3)
-    frame.CFrame   = CFrame.new(position + Vector3.new(0, 0.2, 0))
-    frame.Color    = Color3.fromRGB(80, 55, 35)
+    frame.Size = Vector3.new(6, 0.4, 3)
+    frame.CFrame = CFrame.new(grounded + Vector3.new(0, 0.2, 0))
+    frame.Color = Color3.fromRGB(80, 55, 35)
     frame.Material = Enum.Material.Wood
-    frame.Parent   = folder
+    frame.Parent = model
 
-    -- Mattress
     local mattress = Instance.new("Part")
-    mattress.Name     = "Mattress"
+    mattress.Name = "Mattress"
     mattress.Anchored = true
-    mattress.Size     = Vector3.new(5.4, 0.5, 2.6)
-    mattress.CFrame   = CFrame.new(position + Vector3.new(0, 0.65, 0))
-    mattress.Color    = Color3.fromRGB(55, 80, 55)
+    mattress.Size = Vector3.new(5.4, 0.5, 2.6)
+    mattress.CFrame = CFrame.new(grounded + Vector3.new(0, 0.65, 0))
+    mattress.Color = Color3.fromRGB(55, 80, 55)
     mattress.Material = Enum.Material.Fabric
-    mattress.Parent   = folder
+    mattress.Parent = model
 
-    -- Pillow (at the +Z end)
     local pillow = Instance.new("Part")
-    pillow.Name     = "Pillow"
+    pillow.Name = "Pillow"
     pillow.Anchored = true
-    pillow.Size     = Vector3.new(1.6, 0.4, 1.2)
-    pillow.CFrame   = CFrame.new(position + Vector3.new(0, 1.05, 1.1))
-    pillow.Color    = Color3.fromRGB(220, 200, 160)
+    pillow.Size = Vector3.new(1.6, 0.4, 1.2)
+    pillow.CFrame = CFrame.new(grounded + Vector3.new(0, 1.05, 1.1))
+    pillow.Color = Color3.fromRGB(220, 200, 160)
     pillow.Material = Enum.Material.Fabric
-    pillow.Parent   = folder
+    pillow.Parent = model
 
-    -- Tags
     local isBedroll = Instance.new("BoolValue", frame)
-    isBedroll.Name  = "IsBedroll"
+    isBedroll.Name = "IsBedroll"
     isBedroll.Value = true
 
     local ownerVal = Instance.new("StringValue", frame)
-    ownerVal.Name  = "Owner"
+    ownerVal.Name = "Owner"
     ownerVal.Value = tostring(ownerUserId or "")
 
     local cooldown = Instance.new("BoolValue", frame)
-    cooldown.Name  = "Cooldown"
+    cooldown.Name = "Cooldown"
     cooldown.Value = false
 
-    -- ProximityPrompt on the frame so players standing near it get the prompt
     local prompt = Instance.new("ProximityPrompt", frame)
-    prompt.ActionText            = "Sleep"
-    prompt.ObjectText            = "Bedroll"
-    prompt.HoldDuration          = 1.5   -- hold for 1.5s to confirm sleep
+    prompt.ActionText = "Sleep"
+    prompt.ObjectText = "Bedroll"
+    prompt.HoldDuration = 1.5
     prompt.MaxActivationDistance = 6
-    prompt.RequiresLineOfSight   = false
-    -- SleepService wires up .Triggered in Milestone 6b
+    prompt.RequiresLineOfSight = false
 
-    folder.PrimaryPart = frame
-    folder.Parent      = Workspace
-    return folder
+    model.PrimaryPart = frame
+    model.Parent = Workspace
+    return model
 end
 
--- ── Day / night tick ──────────────────────────────────────────────────────
+function WorldService:init(context)
+    ctx = context
+    self:setupLighting()
+    self:generateTerrain()
+    self:spawnResourceNodes()
+
+    local starterCampfirePos = self:sampleGroundPosition({
+        minRadius = 20,
+        maxRadius = 65,
+        excludeLava = true,
+        attempts = 30,
+    }) or Vector3.new(0, 2, 20)
+    self:spawnCampfire(starterCampfirePos)
+
+    print("[WorldService] World generated")
+end
 
 function WorldService:tick(dt)
-    local cfg      = ctx.Config.World
-    local Players  = game:GetService("Players")
-    dayTimer       = dayTimer + dt
+    local worldCfg = getWorldConfig()
+    dayTimer = dayTimer + dt
 
-    if dayTimer >= cfg.DayLengthSecs then
-        dayTimer = dayTimer - cfg.DayLengthSecs
-        day      = day + 1
-        -- Clear bedroll cooldowns at dawn so players can sleep again next night
+    if dayTimer >= worldCfg.dayLength then
+        dayTimer = dayTimer - worldCfg.dayLength
+        day = day + 1
+
         for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj.Name == "Cooldown" and obj:IsA("BoolValue") then
+            if obj:IsA("BoolValue") and obj.Name == "Cooldown" then
                 obj.Value = false
             end
         end
     end
 
-    local fraction  = dayTimer / cfg.DayLengthSecs
+    local fraction = dayTimer / worldCfg.dayLength
     local clockTime = fraction * 24
     Lighting.ClockTime = clockTime
 
-    local isNight = clockTime >= cfg.NightStartClock or clockTime < cfg.NightEndClock
-    local targetBrightness = isNight and 0.4 or 1.8
+    local isNightNow = clockTime >= worldCfg.nightStart or clockTime < worldCfg.nightEnd
+    local targetBrightness = isNightNow and 0.4 or 1.8
     Lighting.Brightness = Lighting.Brightness + (targetBrightness - Lighting.Brightness) * dt * 0.5
 
     if math.floor(dayTimer) % 2 == 0 then
         for _, player in ipairs(Players:GetPlayers()) do
-            ctx.Remotes.DayNightUpdate:FireClient(player, { day=day, isNight=isNight })
+            ctx.Remotes.DayNightUpdate:FireClient(player, { day = day, isNight = isNightNow })
         end
     end
 
-    -- Campfire warming
     for _, obj in ipairs(Workspace:GetChildren()) do
-        if obj:FindFirstChild("IsCampfire") then
-            local cfPos = obj.CFrame.Position
+        if obj:IsA("BasePart") and obj:FindFirstChild("IsCampfire") then
+            local campfirePos = obj.Position
             for _, player in ipairs(Players:GetPlayers()) do
-                local char = player.Character
-                local root = char and char:FindFirstChild("HumanoidRootPart")
+                local character = player.Character
+                local root = character and character:FindFirstChild("HumanoidRootPart")
                 if root then
-                    local dist = (root.Position - cfPos).Magnitude
-                    if dist <= ctx.Config.Vitals.CampfireWarmRadius then
-                        ctx.VitalsService:adjustTemperature(player, ctx.Config.Vitals.CampfireWarmRate * dt)
+                    local dist = (root.Position - campfirePos).Magnitude
+                    if dist <= ((ctx.Config.Vitals and ctx.Config.Vitals.CampfireWarmRadius) or 18) then
+                        if ctx.VitalsService and ctx.VitalsService.adjustTemperature then
+                            ctx.VitalsService:adjustTemperature(
+                                player,
+                                ((ctx.Config.Vitals and ctx.Config.Vitals.CampfireWarmRate) or 4) * dt
+                            )
+                        end
                     end
                 end
             end
@@ -444,19 +619,29 @@ function WorldService:tick(dt)
     end
 end
 
-function WorldService:getDay()   return day end
-function WorldService:getDayTimer() return dayTimer end
-function WorldService:isNight()
-    local t = Lighting.ClockTime
-    return t >= ctx.Config.World.NightStartClock or t < ctx.Config.World.NightEndClock
+function WorldService:getDay()
+    return day
 end
-function WorldService:isRaining() return false end  -- stub; extend in weather milestone
+
+function WorldService:getDayTimer()
+    return dayTimer
+end
+
+function WorldService:isNight()
+    local worldCfg = getWorldConfig()
+    local clock = Lighting.ClockTime
+    return clock >= worldCfg.nightStart or clock < worldCfg.nightEnd
+end
+
+function WorldService:isRaining()
+    return false
+end
+
 function WorldService:skipToMorning()
-    -- Jump dayTimer to just past dawn (NightEndClock / 24 * DayLengthSecs)
-    local cfg   = ctx.Config.World
-    local dawn  = (cfg.NightEndClock / 24) * cfg.DayLengthSecs
-    dayTimer    = dawn + 1
-    Lighting.ClockTime = cfg.NightEndClock + 0.1
+    local worldCfg = getWorldConfig()
+    local dawn = (worldCfg.nightEnd / 24) * worldCfg.dayLength
+    dayTimer = dawn + 1
+    Lighting.ClockTime = worldCfg.nightEnd + 0.1
 end
 
 return WorldService
