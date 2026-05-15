@@ -1,22 +1,23 @@
 {
-  "name": "roblox-survival-prototype",
+  "name": "VolcanicSurvival",
   "tree": {
     "$className": "DataModel",
-    "ReplicatedStorage": {
-      "Shared": {
-        "$path": "src/shared"
-      }
-    },
     "ServerScriptService": {
-      "SurvivalServer": {
+      "$className": "ServerScriptService",
+      "Server": {
         "$path": "src/server"
       }
     },
-    "StarterPlayer": {
-      "StarterPlayerScripts": {
-        "SurvivalClient": {
-          "$path": "src/client"
-        }
+    "StarterPlayerScripts": {
+      "$className": "StarterPlayerScripts",
+      "Client": {
+        "$path": "src/client"
+      }
+    },
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "Shared": {
+        "$path": "src/shared"
       }
     }
   }

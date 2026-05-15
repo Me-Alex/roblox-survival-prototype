@@ -1,332 +1,150 @@
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local Config = require(ReplicatedStorage.Shared.SurvivalConfig)
-local Remotes = require(ReplicatedStorage.Shared.Remotes)
+-- InventoryService.lua
+-- Server-authoritative inventory management.
 
 local InventoryService = {}
-
 local inventories = {}
-local equippedByPlayer = {}
-local durabilityByPlayer = {}
-local context
+local ctx
 
-local function markDirty(player)
-	if context and context.PersistenceService then
-		context.PersistenceService.markPlayerDirty(player)
-	end
+local function emptyInventory(cfg)
+    local slots = {}
+    for i = 1, cfg.Inventory.MaxSlots do slots[i] = nil end
+    return { slots = slots }
 end
 
-local function cloneMap(items)
-	local copy = {}
-
-	if type(items) ~= "table" then
-		return copy
-	end
-
-	for itemId, count in pairs(items) do
-		copy[itemId] = count
-	end
-
-	return copy
+local function findStackSlot(inv, itemId, maxStack)
+    for i, slot in ipairs(inv.slots) do
+        if slot and slot.itemId == itemId and slot.amount < maxStack then return i end
+    end
+    return nil
 end
 
-local function getOrCreate(player)
-	if not inventories[player] then
-		inventories[player] = {}
-
-		for itemId in pairs(Config.Items) do
-			inventories[player][itemId] = 0
-		end
-	end
-
-	return inventories[player]
+local function findEmptySlot(inv, maxSlots)
+    for i = 1, maxSlots do if not inv.slots[i] then return i end end
+    return nil
 end
 
-local function getEquipped(player)
-	if not equippedByPlayer[player] then
-		equippedByPlayer[player] = {
-			Weapon = nil,
-			Armor = nil,
-		}
-	end
-
-	return equippedByPlayer[player]
+local function syncInventory(player, inv)
+    ctx.Remotes.UpdateInventory:FireClient(player, inv.slots)
 end
 
-local function getDurability(player)
-	if not durabilityByPlayer[player] then
-		durabilityByPlayer[player] = {}
-	end
-
-	return durabilityByPlayer[player]
+function InventoryService:init(context)
+    ctx = context
+    ctx.Remotes.UseItem:Connect(function(player, slotIndex)  self:useItem(player, slotIndex)  end)
+    ctx.Remotes.DropItem:Connect(function(player, slotIndex) self:dropItem(player, slotIndex) end)
 end
 
-local function ensureDurability(player, itemId)
-	local equipmentConfig = Config.Equipment[itemId]
-	if not equipmentConfig then
-		return
-	end
-
-	local durability = getDurability(player)
-	if not durability[itemId] or durability[itemId] <= 0 then
-		durability[itemId] = equipmentConfig.MaxDurability
-	end
+function InventoryService:onPlayerAdded(player)
+    inventories[player] = emptyInventory(ctx.Config)
+    syncInventory(player, inventories[player])
 end
 
-local function clearInvalidEquipment(player)
-	local items = getOrCreate(player)
-	local equipped = getEquipped(player)
-
-	for slot, itemId in pairs(equipped) do
-		if itemId and (items[itemId] or 0) <= 0 then
-			equipped[slot] = nil
-		end
-	end
+function InventoryService:onPlayerRemoving(player)
+    inventories[player] = nil
 end
 
-function InventoryService.getInventory(player)
-	clearInvalidEquipment(player)
-
-	return {
-		Items = cloneMap(getOrCreate(player)),
-		Equipped = cloneMap(getEquipped(player)),
-		Durability = cloneMap(getDurability(player)),
-	}
+function InventoryService:addItem(player, itemId, amount)
+    local inv = inventories[player]
+    if not inv then return false end
+    local cfg     = ctx.Config
+    local itemCfg = cfg.Items[itemId]
+    if not itemCfg then warn("[Inventory] Unknown item: "..tostring(itemId)) return false end
+    local maxStack = itemCfg.stackSize or 1
+    local maxSlots = cfg.Inventory.MaxSlots
+    local remaining = amount
+    while remaining > 0 do
+        local stackSlot = findStackSlot(inv, itemId, maxStack)
+        if stackSlot then
+            local space = maxStack - inv.slots[stackSlot].amount
+            local add   = math.min(space, remaining)
+            inv.slots[stackSlot].amount = inv.slots[stackSlot].amount + add
+            remaining = remaining - add
+        else
+            local emptySlot = findEmptySlot(inv, maxSlots)
+            if not emptySlot then
+                ctx.Remotes.Notify:FireClient(player, { text="Inventory is full!", color="red" })
+                syncInventory(player, inv)
+                return false
+            end
+            local add = math.min(maxStack, remaining)
+            inv.slots[emptySlot] = { itemId = itemId, amount = add }
+            remaining = remaining - add
+        end
+    end
+    syncInventory(player, inv)
+    return true
 end
 
-function InventoryService.getSnapshot(player)
-	return InventoryService.getInventory(player)
+function InventoryService:removeItem(player, itemId, amount)
+    local inv = inventories[player]
+    if not inv then return false end
+    local total = 0
+    for _, slot in ipairs(inv.slots) do
+        if slot and slot.itemId == itemId then total = total + slot.amount end
+    end
+    if total < amount then return false end
+    local remaining = amount
+    for i, slot in ipairs(inv.slots) do
+        if slot and slot.itemId == itemId and remaining > 0 then
+            local take = math.min(slot.amount, remaining)
+            slot.amount = slot.amount - take
+            remaining   = remaining - take
+            if slot.amount <= 0 then inv.slots[i] = nil end
+        end
+    end
+    syncInventory(player, inv)
+    return true
 end
 
-function InventoryService.applySnapshot(player, snapshot)
-	snapshot = type(snapshot) == "table" and snapshot or {}
-
-	local items = getOrCreate(player)
-	local equipped = getEquipped(player)
-	local durability = getDurability(player)
-	local snapshotItems = type(snapshot.Items) == "table" and snapshot.Items or {}
-	local snapshotEquipped = type(snapshot.Equipped) == "table" and snapshot.Equipped or {}
-	local snapshotDurability = type(snapshot.Durability) == "table" and snapshot.Durability or {}
-
-	for itemId in pairs(Config.Items) do
-		items[itemId] = math.max(0, math.floor(tonumber(snapshotItems[itemId]) or 0))
-	end
-
-	for slot in pairs(equipped) do
-		equipped[slot] = nil
-	end
-
-	for slot, itemId in pairs(snapshotEquipped) do
-		if Config.Equipment[itemId] and Config.Equipment[itemId].Slot == slot and (items[itemId] or 0) > 0 then
-			equipped[slot] = itemId
-		end
-	end
-
-	for itemId in pairs(durability) do
-		durability[itemId] = nil
-	end
-
-	for itemId, value in pairs(snapshotDurability) do
-		local equipmentConfig = Config.Equipment[itemId]
-		if equipmentConfig and (items[itemId] or 0) > 0 then
-			durability[itemId] = math.clamp(tonumber(value) or equipmentConfig.MaxDurability, 1, equipmentConfig.MaxDurability)
-		end
-	end
-
-	for itemId, count in pairs(items) do
-		if count > 0 then
-			ensureDurability(player, itemId)
-		end
-	end
-
-	clearInvalidEquipment(player)
-	InventoryService.send(player)
+function InventoryService:hasItem(player, itemId, amount)
+    local inv = inventories[player]
+    if not inv then return false end
+    local total = 0
+    for _, slot in ipairs(inv.slots) do
+        if slot and slot.itemId == itemId then total = total + slot.amount end
+    end
+    return total >= (amount or 1)
 end
 
-function InventoryService.send(player)
-	Remotes.get("InventoryUpdated"):FireClient(player, InventoryService.getInventory(player))
-
-	if context and context.ItemToolService then
-		local itemToolService = context.ItemToolService
-		task.defer(function()
-			itemToolService.syncPlayerTools(player)
-		end)
-	end
+function InventoryService:getCount(player, itemId)
+    local inv = inventories[player]
+    if not inv then return 0 end
+    local total = 0
+    for _, slot in ipairs(inv.slots) do
+        if slot and slot.itemId == itemId then total = total + slot.amount end
+    end
+    return total
 end
 
-function InventoryService.addItem(player, itemId, amount)
-	assert(Config.Items[itemId], string.format("Unknown item %s", tostring(itemId)))
-
-	local items = getOrCreate(player)
-	items[itemId] = math.max(0, (items[itemId] or 0) + amount)
-	if amount > 0 then
-		ensureDurability(player, itemId)
-	end
-	InventoryService.send(player)
-
-	if amount > 0 and context and context.ObjectiveService then
-		context.ObjectiveService.recordCollected(player, itemId, amount)
-	end
-
-	markDirty(player)
+function InventoryService:useItem(player, slotIndex)
+    local inv = inventories[player]
+    if not inv then return end
+    local slot = inv.slots[slotIndex]
+    if not slot then return end
+    local itemCfg = ctx.Config.Items[slot.itemId]
+    if not itemCfg then return end
+    if itemCfg.type == "food" then
+        if itemCfg.hunger then ctx.VitalsService:addHunger(player, itemCfg.hunger) end
+        if itemCfg.thirst then ctx.VitalsService:addThirst(player, itemCfg.thirst) end
+        slot.amount = slot.amount - 1
+        if slot.amount <= 0 then inv.slots[slotIndex] = nil end
+        syncInventory(player, inv)
+        ctx.Remotes.Notify:FireClient(player, { text="Ate "..itemCfg.displayName, color="green" })
+    end
+    if itemCfg.healAmount then
+        ctx.VitalsService:heal(player, itemCfg.healAmount)
+        slot.amount = slot.amount - 1
+        if slot.amount <= 0 then inv.slots[slotIndex] = nil end
+        syncInventory(player, inv)
+        ctx.Remotes.Notify:FireClient(player, { text="Used "..itemCfg.displayName..(" (+"..itemCfg.healAmount.." HP)"), color="green" })
+    end
 end
 
-function InventoryService.hasItem(player, itemId, amount)
-	local items = getOrCreate(player)
-	return (items[itemId] or 0) >= (amount or 1)
-end
-
-function InventoryService.hasItems(player, cost)
-	local items = getOrCreate(player)
-
-	for itemId, amount in pairs(cost) do
-		if (items[itemId] or 0) < amount then
-			return false, itemId
-		end
-	end
-
-	return true
-end
-
-function InventoryService.removeItems(player, cost)
-	local ok = InventoryService.hasItems(player, cost)
-	if not ok then
-		return false
-	end
-
-	local items = getOrCreate(player)
-
-	for itemId, amount in pairs(cost) do
-		items[itemId] -= amount
-	end
-
-	clearInvalidEquipment(player)
-	InventoryService.send(player)
-	markDirty(player)
-	return true
-end
-
-function InventoryService.getEquippedItem(player, slot)
-	return getEquipped(player)[slot]
-end
-
-function InventoryService.equipItem(player, itemId)
-	local equipmentConfig = Config.Equipment[itemId]
-	if not equipmentConfig then
-		return false, "That item cannot be equipped."
-	end
-
-	if not InventoryService.hasItem(player, itemId, 1) then
-		return false, "You do not have that item."
-	end
-
-	ensureDurability(player, itemId)
-	getEquipped(player)[equipmentConfig.Slot] = itemId
-	InventoryService.send(player)
-
-	if context and context.ItemToolService and context.ItemToolService.equipPlayerTool then
-		context.ItemToolService.equipPlayerTool(player, itemId)
-	end
-
-	markDirty(player)
-
-	return true, string.format("Equipped %s.", Config.Items[itemId].DisplayName)
-end
-
-function InventoryService.getDurability(player, itemId)
-	return getDurability(player)[itemId]
-end
-
-function InventoryService.damageEquipment(player, itemId, amount)
-	if not itemId or not Config.Equipment[itemId] then
-		return
-	end
-
-	if not InventoryService.hasItem(player, itemId, 1) then
-		return
-	end
-
-	ensureDurability(player, itemId)
-
-	local durability = getDurability(player)
-	durability[itemId] -= amount
-
-	if durability[itemId] <= 0 then
-		InventoryService.removeItems(player, { [itemId] = 1 })
-
-		if InventoryService.hasItem(player, itemId, 1) then
-			durability[itemId] = Config.Equipment[itemId].MaxDurability
-		else
-			durability[itemId] = nil
-			local equipped = getEquipped(player)
-			for slot, equippedItemId in pairs(equipped) do
-				if equippedItemId == itemId then
-					equipped[slot] = nil
-				end
-			end
-		end
-
-		Remotes.get("Notification"):FireClient(player, string.format("%s broke.", Config.Items[itemId].DisplayName))
-		InventoryService.send(player)
-	else
-		InventoryService.send(player)
-	end
-
-	markDirty(player)
-end
-
-function InventoryService.damageEquippedArmor(player, amount)
-	local armorId = InventoryService.getEquippedItem(player, "Armor")
-	if armorId then
-		InventoryService.damageEquipment(player, armorId, amount)
-	end
-end
-
-function InventoryService.consume(player, itemId)
-	local consumable = Config.Consumables[itemId]
-	if not consumable then
-		return false, "That item cannot be used."
-	end
-
-	if not InventoryService.hasItem(player, itemId, 1) then
-		return false, "You do not have that item."
-	end
-
-	InventoryService.removeItems(player, { [itemId] = 1 })
-
-	if context and context.VitalsService then
-		context.VitalsService.applyConsumable(player, consumable)
-	end
-
-	Remotes.get("Notification"):FireClient(player, consumable.Notify or "Item used.")
-	return true, "Used."
-end
-
-function InventoryService.init(newContext)
-	context = newContext
-
-	Remotes.get("GetInventory").OnServerInvoke = function(player)
-		return InventoryService.getInventory(player)
-	end
-
-	Remotes.get("ConsumeRequest").OnServerInvoke = function(player, itemId)
-		return InventoryService.consume(player, itemId)
-	end
-
-	Remotes.get("EquipRequest").OnServerInvoke = function(player, itemId)
-		return InventoryService.equipItem(player, itemId)
-	end
-end
-
-function InventoryService.playerAdded(player)
-	getOrCreate(player)
-	InventoryService.send(player)
-end
-
-function InventoryService.playerRemoving(player)
-	inventories[player] = nil
-	equippedByPlayer[player] = nil
-	durabilityByPlayer[player] = nil
+function InventoryService:dropItem(player, slotIndex)
+    local inv = inventories[player]
+    if not inv then return end
+    if not inv.slots[slotIndex] then return end
+    inv.slots[slotIndex] = nil
+    syncInventory(player, inv)
 end
 
 return InventoryService
