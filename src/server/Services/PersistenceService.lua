@@ -106,6 +106,35 @@ local function sanitizeForDataStore(value)
 	return copy
 end
 
+local function callServiceMethod(service, methodName, ...)
+	if not service then
+		return false, nil
+	end
+
+	local method = service[methodName]
+	if type(method) ~= "function" then
+		return false, nil
+	end
+
+	local okInfo, arity = pcall(function()
+		return select(1, debug.info(method, "a"))
+	end)
+
+	if okInfo and type(arity) == "number" then
+		local passedCount = select("#", ...)
+		if arity >= passedCount + 1 then
+			return pcall(method, service, ...)
+		end
+		return pcall(method, ...)
+	end
+
+	local ok, result = pcall(method, service, ...)
+	if ok then
+		return true, result
+	end
+	return pcall(method, ...)
+end
+
 local function playerKey(player)
 	return string.format("player/%d/v%d", player.UserId, PLAYER_VERSION)
 end
@@ -173,23 +202,38 @@ local function buildPlayerSnapshot(player)
 	}
 
 	if context.InventoryService and context.InventoryService.getSnapshot then
-		snapshot.Inventory = context.InventoryService.getSnapshot(player)
+		local ok, value = callServiceMethod(context.InventoryService, "getSnapshot", player)
+		if ok then
+			snapshot.Inventory = value
+		end
 	end
 
 	if context.VitalsService and context.VitalsService.getSnapshot then
-		snapshot.Vitals = context.VitalsService.getSnapshot(player)
+		local ok, value = callServiceMethod(context.VitalsService, "getSnapshot", player)
+		if ok then
+			snapshot.Vitals = value
+		end
 	end
 
 	if context.ProgressionService and context.ProgressionService.getSnapshot then
-		snapshot.Progression = context.ProgressionService.getSnapshot(player)
+		local ok, value = callServiceMethod(context.ProgressionService, "getSnapshot", player)
+		if ok then
+			snapshot.Progression = value
+		end
 	end
 
 	if context.ObjectiveService and context.ObjectiveService.getSnapshot then
-		snapshot.Objectives = context.ObjectiveService.getSnapshot(player)
+		local ok, value = callServiceMethod(context.ObjectiveService, "getSnapshot", player)
+		if ok then
+			snapshot.Objectives = value
+		end
 	end
 
 	if context.WorldService and context.WorldService.getSnapshot then
-		snapshot.World = context.WorldService.getSnapshot(player)
+		local ok, value = callServiceMethod(context.WorldService, "getSnapshot", player)
+		if ok then
+			snapshot.World = value
+		end
 	end
 
 	return snapshot
@@ -203,8 +247,8 @@ local function applyStarterLoadout(player)
 	local inventory = context.InventoryService
 
 	for itemId, amount in pairs(STARTER_LOADOUT) do
-		if amount > 0 and not inventory.hasItem(player, itemId, 1) then
-			inventory.addItem(player, itemId, amount)
+		if amount > 0 and not inventory:hasItem(player, itemId, 1) then
+			inventory:addItem(player, itemId, amount)
 		end
 	end
 end
@@ -215,28 +259,28 @@ local function applyPlayerSnapshot(player, snapshot)
 	end
 
 	if context.InventoryService and context.InventoryService.applySnapshot then
-		context.InventoryService.applySnapshot(player, snapshot.Inventory or {})
+		callServiceMethod(context.InventoryService, "applySnapshot", player, snapshot.Inventory or {})
 	end
 
 	if context.VitalsService and context.VitalsService.applySnapshot then
-		context.VitalsService.applySnapshot(player, snapshot.Vitals or {})
+		callServiceMethod(context.VitalsService, "applySnapshot", player, snapshot.Vitals or {})
 	end
 
 	if context.ProgressionService and context.ProgressionService.applySnapshot then
-		context.ProgressionService.applySnapshot(player, snapshot.Progression or {})
+		callServiceMethod(context.ProgressionService, "applySnapshot", player, snapshot.Progression or {})
 	end
 
 	if context.ObjectiveService and context.ObjectiveService.applySnapshot then
-		context.ObjectiveService.applySnapshot(player, snapshot.Objectives or {})
+		callServiceMethod(context.ObjectiveService, "applySnapshot", player, snapshot.Objectives or {})
 	end
 
 	if context.WorldService and context.WorldService.applySnapshot then
-		context.WorldService.applySnapshot(player, snapshot.World or {})
+		callServiceMethod(context.WorldService, "applySnapshot", player, snapshot.World or {})
 	end
 
 	if context.ItemToolService then
 		task.defer(function()
-			context.ItemToolService.syncPlayerTools(player)
+			callServiceMethod(context.ItemToolService, "syncPlayerTools", player)
 		end)
 	end
 end
@@ -281,7 +325,7 @@ function PersistenceService.loadWorld()
 	lastGoodWorldSnapshot = cloneTable(result)
 
 	if context.CraftingService and context.CraftingService.applyWorldSnapshot then
-		context.CraftingService.applyWorldSnapshot(result)
+		callServiceMethod(context.CraftingService, "applyWorldSnapshot", result)
 	end
 
 	worldDirty = false
@@ -304,7 +348,11 @@ function PersistenceService.saveWorld()
 
 	worldSaveInFlight = true
 
-	local snapshot = context.CraftingService.getWorldSnapshot()
+	local okSnapshot, snapshot = callServiceMethod(context.CraftingService, "getWorldSnapshot")
+	if not okSnapshot or type(snapshot) ~= "table" then
+		worldSaveInFlight = false
+		return false
+	end
 	snapshot.Version = WORLD_VERSION
 	snapshot.SavedAt = os.time()
 

@@ -120,7 +120,7 @@ local function grantReward(player, reward)
 	end
 
 	for itemId, amount in pairs(reward) do
-		context.InventoryService.addItem(player, itemId, amount)
+		context.InventoryService:addItem(player, itemId, amount)
 	end
 end
 

@@ -134,8 +134,12 @@ local function spawnStalker()
                     color = "green",
                 })
             end
-            if ctx.ProgressionService and ctx.ProgressionService.addXp then
-                ctx.ProgressionService:addXp(killer, ctx.Config.Progression.KillXp)
+            if ctx.ProgressionService then
+                if ctx.ProgressionService.addXp then
+                    ctx.ProgressionService:addXp(killer, ctx.Config.Progression.KillXp, "combat")
+                elseif ctx.ProgressionService.addXP then
+                    ctx.ProgressionService:addXP(killer, ctx.Config.Progression.KillXp, "combat")
+                end
             end
         end
 

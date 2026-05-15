@@ -347,15 +347,15 @@ function ShopService.purchase(player, shopId, entryId)
 	local amount = math.max(1, math.floor(tonumber(entry.Amount) or 1))
 	local cost = type(entry.Cost) == "table" and entry.Cost or {}
 
-	local canAfford, missingItemId = inventory.hasItems(player, cost)
+	local canAfford, missingItemId = inventory:hasItems(player, cost)
 	if not canAfford then
 		return false, string.format("Need more %s.", getItemDisplayName(missingItemId))
 	end
 
-	if not inventory.removeItems(player, cost) then
+	if not inventory:removeItems(player, cost) then
 		return false, "Not enough resources."
 	end
-	inventory.addItem(player, itemId, amount)
+	inventory:addItem(player, itemId, amount)
 
 	local displayName = entry.DisplayName or getItemDisplayName(itemId)
 	return true, string.format("Purchased %s x%d.", displayName, amount)

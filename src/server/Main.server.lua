@@ -63,6 +63,7 @@ end
 
 local VitalsService      = requireService("VitalsService")
 local InventoryService   = requireService("InventoryService")
+local ItemToolService    = requireService("ItemToolService")
 local CraftingService    = requireService("CraftingService")
 local WorldService       = requireService("WorldService")
 local ResourceService    = requireService("ResourceService")
@@ -83,6 +84,7 @@ local ctx = {
     Remotes            = Remotes,
     VitalsService      = VitalsService,
     InventoryService   = InventoryService,
+    ItemToolService    = ItemToolService,
     CraftingService    = CraftingService,
     WorldService       = WorldService,
     ResourceService    = ResourceService,
@@ -104,6 +106,7 @@ pushService(startupOrder, WorldService)
 pushService(startupOrder, ResourceService)
 pushService(startupOrder, VitalsService)
 pushService(startupOrder, InventoryService)
+pushService(startupOrder, ItemToolService)
 pushService(startupOrder, StoneOvenService)
 pushService(startupOrder, CraftingService)
 pushService(startupOrder, WildlifeService)

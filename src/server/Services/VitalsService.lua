@@ -141,6 +141,43 @@ function VitalsService:get(player)
     return vitals[player]
 end
 
+function VitalsService:getSnapshot(player)
+    local v = vitals[player]
+    if not v then
+        return nil
+    end
+    return {
+        health = v.health,
+        hunger = v.hunger,
+        thirst = v.thirst,
+        temp = v.temp,
+        stamina = v.stamina,
+        bleeding = v.bleeding,
+        poisoned = v.poisoned,
+        soaked = v.soaked,
+    }
+end
+
+function VitalsService:applySnapshot(player, snapshot)
+    if type(snapshot) ~= "table" then
+        return
+    end
+    local current = vitals[player] or defaultVitals()
+    local V = ctx.Config.Vitals
+
+    current.health = math.clamp(tonumber(snapshot.health) or current.health, 0, V.MaxHealth)
+    current.hunger = math.clamp(tonumber(snapshot.hunger) or current.hunger, 0, V.MaxHunger)
+    current.thirst = math.clamp(tonumber(snapshot.thirst) or current.thirst, 0, V.MaxThirst)
+    current.temp = math.clamp(tonumber(snapshot.temp) or current.temp, 0, V.MaxTemperature)
+    current.stamina = math.clamp(tonumber(snapshot.stamina) or current.stamina, 0, V.MaxStamina)
+    current.bleeding = snapshot.bleeding == true
+    current.poisoned = snapshot.poisoned == true
+    current.soaked = snapshot.soaked == true
+
+    vitals[player] = current
+    broadcast(player)
+end
+
 -- cause (optional string): "Starvation", "Dehydration", "Freezing",
 --                          "Bleeding", "Poison", "Night Stalker", etc.
 function VitalsService:applyDamage(player, amount, cause)

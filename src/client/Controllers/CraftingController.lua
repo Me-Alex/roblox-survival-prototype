@@ -46,6 +46,36 @@ local activeCategory = "Tools"
 local inventory      = {}   -- mirror of server inventory, updated via InventoryUpdate
 local categories     = { "Tools", "Weapons", "Survival", "Food" }
 
+local function computeCategories()
+    local map = {}
+    for _, recipe in pairs(ctx.Config.Recipes or {}) do
+        if type(recipe) == "table" and type(recipe.category) == "string" and recipe.category ~= "" then
+            map[recipe.category] = true
+        end
+    end
+
+    local order = { "Tools", "Weapons", "Survival", "Food", "Building", "Armor" }
+    local result = {}
+    local seen = {}
+    for _, name in ipairs(order) do
+        if map[name] then
+            table.insert(result, name)
+            seen[name] = true
+        end
+    end
+
+    for name in pairs(map) do
+        if not seen[name] then
+            table.insert(result, name)
+        end
+    end
+
+    if #result == 0 then
+        result = { "Tools" }
+    end
+    return result
+end
+
 -- ── helpers ───────────────────────────────────────────────────────────────
 
 local function countItem(itemId)
@@ -379,6 +409,10 @@ end
 
 function CraftingController:init(context)
     ctx = context
+    categories = computeCategories()
+    if not table.find(categories, activeCategory) then
+        activeCategory = categories[1]
+    end
     buildGui()
 
     -- Keep a local mirror of inventory so ingredient counts are always fresh

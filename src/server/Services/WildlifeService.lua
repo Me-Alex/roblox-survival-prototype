@@ -250,7 +250,13 @@ local function killAnimal(entry)
                 color = "green",
             })
         end
-        ctx.ProgressionService:addXp(killer, cfg.KillXp)
+        if ctx.ProgressionService then
+            if ctx.ProgressionService.addXp then
+                ctx.ProgressionService:addXp(killer, cfg.KillXp, "hunting")
+            elseif ctx.ProgressionService.addXP then
+                ctx.ProgressionService:addXP(killer, cfg.KillXp, "hunting")
+            end
+        end
     end
 
     -- Remove from lookup and list

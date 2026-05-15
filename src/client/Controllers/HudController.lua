@@ -299,6 +299,13 @@ local function popToast()
     if #toastQueue == 0 then toastActive = false return end
     toastActive = true
     local data  = table.remove(toastQueue, 1)
+    if type(data) == "string" then
+        data = { text = data, color = "white" }
+    end
+    if type(data) ~= "table" then
+        data = { text = tostring(data), color = "white" }
+    end
+    data.text = data.text or "Notification"
     local color = C[data.color] or C.white
 
     local toast = Instance.new("TextLabel")

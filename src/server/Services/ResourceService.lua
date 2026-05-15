@@ -17,6 +17,13 @@ local ctx
 
 local respawnQueue = {}
 local rng = Random.new()
+local DEFAULT_RESPAWN_TIME = 120
+local DEFAULT_DROPS = {
+    Tree = { item = "AshWood", min = 2, max = 4 },
+    Rock = { item = "Stone", min = 2, max = 4 },
+    Bush = { item = "RawBerries", min = 1, max = 3 },
+    Fiber = { item = "Fiber", min = 2, max = 5 },
+}
 
 local function randomInt(rng, min, max)
     return rng:NextInteger(min, max)
@@ -52,7 +59,8 @@ local function harvestNode(player, node)
     node.Transparency = 1
     node.CanCollide   = false
 
-    local dropCfg = ctx.Config.Resources.Drops[nodeType.Value]
+    local configuredDrops = ctx.Config.Resources and ctx.Config.Resources.Drops
+    local dropCfg = (configuredDrops and configuredDrops[nodeType.Value]) or DEFAULT_DROPS[nodeType.Value]
     if dropCfg then
         local amount = randomInt(rng, dropCfg.min, dropCfg.max)
         local added  = ctx.InventoryService:addItem(player, dropCfg.item, amount)
@@ -62,6 +70,13 @@ local function harvestNode(player, node)
                 text  = "+" .. amount .. " " .. displayName,
                 color = "green",
             })
+
+            if ctx.ObjectiveService and ctx.ObjectiveService.recordCollected then
+                ctx.ObjectiveService:recordCollected(player, dropCfg.item, amount)
+            end
+            if ctx.ProgressionService and ctx.ProgressionService.addXp then
+                ctx.ProgressionService:addXp(player, (ctx.Config.Progression and ctx.Config.Progression.HarvestXp) or 0, "harvesting")
+            end
         end
     end
 
@@ -72,7 +87,7 @@ local function harvestNode(player, node)
 
     table.insert(respawnQueue, {
         node  = node,
-        timer = ctx.Config.Resources.RespawnTime,
+        timer = (ctx.Config.Resources and ctx.Config.Resources.RespawnTime) or DEFAULT_RESPAWN_TIME,
     })
 end
 
@@ -156,16 +171,20 @@ function ResourceService:tick(dt)
         entry.timer = entry.timer - dt
         if entry.timer <= 0 then
             local node      = entry.node
+            if not node or not node.Parent then
+                table.remove(respawnQueue, i)
+                continue
+            end
             local hitsLeft  = node:FindFirstChild("HitsLeft")
             local harvested = node:FindFirstChild("Harvested")
             local nodeType  = node:FindFirstChild("NodeType")
-            if node and node.Parent then
-                if hitsLeft  then hitsLeft.Value  = ctx.Config.Resources.Hits[nodeType and nodeType.Value] or 1 end
-                if harvested then harvested.Value = false end
-                node.Transparency = 0
-                node.CanCollide   = true
-                ctx.Remotes.ResourceChanged:FireAllClients({ nodeId=tostring(node), harvested=false })
+            if hitsLeft then
+                hitsLeft.Value = (ctx.Config.Resources and ctx.Config.Resources.Hits[nodeType and nodeType.Value]) or 1
             end
+            if harvested then harvested.Value = false end
+            node.Transparency = 0
+            node.CanCollide = true
+            ctx.Remotes.ResourceChanged:FireAllClients({ nodeId=tostring(node), harvested=false })
             table.remove(respawnQueue, i)
         else
             i = i + 1

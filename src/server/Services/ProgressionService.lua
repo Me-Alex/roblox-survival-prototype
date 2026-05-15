@@ -65,7 +65,7 @@ local function grantLevelRewards(player, level)
 	local rewardLines = {}
 
 	for itemId, amount in pairs(rewards) do
-		context.InventoryService.addItem(player, itemId, amount)
+		context.InventoryService:addItem(player, itemId, amount)
 
 		local itemConfig = Config.Items[itemId]
 		local displayName = itemConfig and itemConfig.DisplayName or itemId
@@ -142,6 +142,10 @@ function ProgressionService.addXP(player, amount, reason)
 
 	ProgressionService.send(player)
 	markDirty(player)
+end
+
+function ProgressionService.addXp(player, amount, reason)
+	return ProgressionService.addXP(player, amount, reason)
 end
 
 function ProgressionService.init(newContext)

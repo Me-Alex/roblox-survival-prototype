@@ -105,6 +105,10 @@ function CraftingService:tryCraft(player, recipeId)
 
     ctx.InventoryService:addItem(player, recipe.result, recipe.amount)
 
+    if ctx.ObjectiveService and ctx.ObjectiveService.recordCrafted then
+        ctx.ObjectiveService:recordCrafted(player, recipe.result, recipe.amount or 1)
+    end
+
     local iCfg = ctx.Config.Items[recipe.result]
     ctx.Remotes.Notify:FireClient(player, {
         text  = "Crafted: " .. (iCfg and iCfg.displayName or recipe.result)
@@ -112,8 +116,12 @@ function CraftingService:tryCraft(player, recipeId)
         color = "green",
     })
 
-    if ctx.ProgressionService and ctx.ProgressionService.addXp then
-        ctx.ProgressionService:addXp(player, ctx.Config.Progression.CraftXp)
+    if ctx.ProgressionService then
+        if ctx.ProgressionService.addXp then
+            ctx.ProgressionService:addXp(player, ctx.Config.Progression.CraftXp, "crafting")
+        elseif ctx.ProgressionService.addXP then
+            ctx.ProgressionService:addXP(player, ctx.Config.Progression.CraftXp, "crafting")
+        end
     end
 end
 

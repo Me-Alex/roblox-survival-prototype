@@ -12,6 +12,7 @@ local Remotes = {
     VitalsUpdate     = RS:WaitForChild("VitalsUpdate"),
     InventoryUpdate  = RS:WaitForChild("InventoryUpdate"),
     UseItem          = RS:WaitForChild("UseItem"),
+    DropItem         = RS:WaitForChild("DropItem"),
     CraftRequest     = RS:WaitForChild("CraftRequest"),
     DayNightUpdate   = RS:WaitForChild("DayNightUpdate"),
     Notify           = RS:WaitForChild("Notify"),

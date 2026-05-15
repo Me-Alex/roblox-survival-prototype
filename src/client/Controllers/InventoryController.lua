@@ -22,16 +22,21 @@ local C = {
 
 local ITEM_VISUALS = {
     Wood = { Shape = "Block", Size = Vector3.new(1.7, 0.5, 0.8), Color = Color3.fromRGB(101, 67, 42), Material = Enum.Material.Wood },
+    AshWood = { Shape = "Block", Size = Vector3.new(1.7, 0.5, 0.8), Color = Color3.fromRGB(101, 67, 42), Material = Enum.Material.Wood },
     Stone = { Shape = "Ball", Size = Vector3.new(1.1, 1.1, 1.1), Color = Color3.fromRGB(112, 116, 118), Material = Enum.Material.Slate },
     Fiber = { Shape = "Block", Size = Vector3.new(0.4, 1.5, 0.3), Color = Color3.fromRGB(92, 142, 76), Material = Enum.Material.Grass },
     RawMeat = { Shape = "Ball", Size = Vector3.new(1.1, 0.9, 1), Color = Color3.fromRGB(153, 62, 64), Material = Enum.Material.SmoothPlastic },
     CookedMeat = { Shape = "Ball", Size = Vector3.new(1.1, 0.9, 1), Color = Color3.fromRGB(118, 70, 41), Material = Enum.Material.SmoothPlastic },
     Berry = { Shape = "Ball", Size = Vector3.new(0.9, 0.9, 0.9), Color = Color3.fromRGB(166, 43, 70), Material = Enum.Material.SmoothPlastic },
+    RawBerries = { Shape = "Ball", Size = Vector3.new(0.9, 0.9, 0.9), Color = Color3.fromRGB(166, 43, 70), Material = Enum.Material.SmoothPlastic },
     Bandage = { Shape = "Block", Size = Vector3.new(1.2, 0.35, 0.65), Color = Color3.fromRGB(226, 221, 196), Material = Enum.Material.Fabric },
     StoneAxe = { Shape = "Cylinder", Size = Vector3.new(2.1, 0.2, 0.2), Color = Color3.fromRGB(101, 64, 38), Material = Enum.Material.Wood },
     Spear = { Shape = "Cylinder", Size = Vector3.new(2.4, 0.18, 0.18), Color = Color3.fromRGB(112, 76, 45), Material = Enum.Material.Wood },
+    StoneSpear = { Shape = "Cylinder", Size = Vector3.new(2.4, 0.18, 0.18), Color = Color3.fromRGB(112, 76, 45), Material = Enum.Material.Wood },
     Campfire = { Shape = "Block", Size = Vector3.new(1.2, 0.5, 1.2), Color = Color3.fromRGB(180, 90, 20), Material = Enum.Material.Neon },
     Bedroll = { Shape = "Block", Size = Vector3.new(1.3, 0.35, 0.9), Color = Color3.fromRGB(55, 80, 55), Material = Enum.Material.Fabric },
+    DirtyWater = { Shape = "Ball", Size = Vector3.new(0.9, 0.9, 0.9), Color = Color3.fromRGB(90, 130, 160), Material = Enum.Material.Glass },
+    CleanWater = { Shape = "Ball", Size = Vector3.new(0.9, 0.9, 0.9), Color = Color3.fromRGB(120, 180, 230), Material = Enum.Material.Glass },
 }
 
 local gui

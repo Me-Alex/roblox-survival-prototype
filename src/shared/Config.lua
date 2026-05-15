@@ -50,7 +50,14 @@ Config.Resources = {
     BushCount  = 30,
     FiberCount = 30,
     MinSpacing = 18,
+    RespawnTime = 120,
     Hits = { Tree=3, Rock=4, Bush=1, Fiber=1 },
+    Drops = {
+        Tree = { item="AshWood", min=2, max=4 },
+        Rock = { item="Stone", min=2, max=4 },
+        Bush = { item="RawBerries", min=1, max=3 },
+        Fiber = { item="Fiber", min=2, max=5 },
+    },
 }
 
 -- ── Combat ────────────────────────────────────────────────────────────────

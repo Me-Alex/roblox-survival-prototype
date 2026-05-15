@@ -553,7 +553,7 @@ local function runAction(player, itemId, tool)
 	end
 	playerActions[itemId] = now
 
-	if not context.InventoryService.hasItem(player, itemId, 1) then
+	if not context.InventoryService:hasItem(player, itemId, 1) then
 		notify(player, string.format("No %s.", getDisplayName(itemId)))
 		ItemToolService.syncPlayerTools(player)
 		return
@@ -576,24 +576,30 @@ local function runAction(player, itemId, tool)
 
 	if Config.Combat.Weapons[itemId] and context.CombatService then
 		playAttackAnimation(tool, itemId)
-		local ok, message = context.CombatService.attack(player)
-		if not ok and message then
-			notify(player, message)
+		if context.CombatService.attack then
+			local ok, message = context.CombatService:attack(player)
+			if not ok and message then
+				notify(player, message)
+			end
 		end
 	elseif Config.Equipment[itemId] then
-		local _, message = context.InventoryService.equipItem(player, itemId)
+		local _, message = context.InventoryService:equipItem(player, itemId)
 		if message then
 			notify(player, message)
 		end
 	elseif Config.Consumables[itemId] then
-		local ok, message = context.InventoryService.consume(player, itemId)
+		local ok, message = context.InventoryService:consume(player, itemId)
 		if not ok and message then
 			notify(player, message)
 		end
 	elseif Config.Buildables[itemId] and context.CraftingService then
-		local ok, message = context.CraftingService.build(player, itemId)
-		if not ok and message then
-			notify(player, message)
+		if context.CraftingService.build then
+			local ok, message = context.CraftingService:build(player, itemId)
+			if not ok and message then
+				notify(player, message)
+			end
+		else
+			notify(player, string.format("%s cannot be placed from quick-use yet.", getDisplayName(itemId)))
 		end
 	else
 		notify(player, string.format("%s is a crafting material.", getDisplayName(itemId)))
@@ -603,11 +609,11 @@ end
 local function equipIfNeeded(player, itemId)
 	if Config.Equipment[itemId] and context and context.InventoryService then
 		local slot = Config.Equipment[itemId].Slot
-		if context.InventoryService.getEquippedItem and context.InventoryService.getEquippedItem(player, slot) == itemId then
+		if context.InventoryService.getEquippedItem and context.InventoryService:getEquippedItem(player, slot) == itemId then
 			return
 		end
 
-		local _, message = context.InventoryService.equipItem(player, itemId)
+		local _, message = context.InventoryService:equipItem(player, itemId)
 		if message then
 			notify(player, message)
 		end
@@ -667,7 +673,7 @@ function ItemToolService.syncPlayerTools(player)
 		return
 	end
 
-	local snapshot = context.InventoryService.getInventory(player)
+	local snapshot = context.InventoryService:getInventory(player)
 	local activeItemIds = {}
 
 	for itemId, count in pairs(snapshot.Items or {}) do
