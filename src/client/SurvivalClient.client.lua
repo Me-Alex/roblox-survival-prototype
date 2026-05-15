@@ -1853,11 +1853,13 @@ local function triggerEquipAnimation(itemId)
 	itemAnim.EquipTime = 0
 	itemAnim.EquipPulse = 1
 	attachItemViewModel(itemId)
+	playToolAnimation(itemId or "", "Equip")
 end
 
 local function triggerAttackAnimation()
 	itemAnim.SwingTime = 0
 	itemAnim.SwingPulse = 1
+	playToolAnimation(itemAnim.EquippedItemId or "", "Swing")
 end
 
 local function triggerHarvestAnimation(resourceId)
@@ -1919,6 +1921,62 @@ local function attachItemViewModel(itemId)
 	itemViewModel.animTime = 0
 	itemAnim.EquipPulse = 1
 	attachItemViewModel(itemId)
+	playToolAnimation(itemId or "", "Equip")
+end
+
+local TOOL_ANIMATION_IDS = {
+	StoneAxe = { Equip = 0, Swing = 0 },
+	Pickaxe = { Equip = 0, Swing = 0 },
+	Spear = { Equip = 0, Swing = 0 },
+	IronSpear = { Equip = 0, Swing = 0 },
+}
+
+local function getAnimator()
+	local character = player.Character
+	if not character then
+		return nil
+	end
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return nil
+	end
+	return humanoid:FindFirstChildOfClass("Animator") or humanoid:WaitForChild("Animator", 1)
+end
+
+local function loadToolTrack(animator, animationId)
+	if not animator or animationId == 0 then
+		return nil
+	end
+	local anim = Instance.new("Animation")
+	anim.AnimationId = "rbxassetid://" .. tostring(animationId)
+	return animator:LoadAnimation(anim)
+end
+
+local activeToolTracks = { Equip = nil, Swing = nil }
+
+local function playToolAnimation(itemId, action)
+	local ids = TOOL_ANIMATION_IDS[itemId]
+	if not ids then
+		return
+	end
+	local animator = getAnimator()
+	if not animator then
+		return
+	end
+	if activeToolTracks[action] then
+		activeToolTracks[action]:Stop(0.1)
+		activeToolTracks[action] = nil
+	end
+	local animationId = ids[action]
+	if type(animationId) ~= 'number' or animationId <= 0 then
+		return
+	end
+	local track = loadToolTrack(animator, animationId)
+	if track then
+		track.Priority = Enum.AnimationPriority.Action
+		track:Play(0.08, 1, 1)
+		activeToolTracks[action] = track
+	end
 end
 
 local function updateItemViewModel(deltaTime)
