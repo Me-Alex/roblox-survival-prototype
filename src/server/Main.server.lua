@@ -1,6 +1,5 @@
--- Main.server.lua  (Milestone 6b)
+-- Main.server.lua  (Milestone 7)
 local RunService          = game:GetService("RunService")
-local Players             = game:GetService("Players")
 local ReplicatedStorage   = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
@@ -17,28 +16,30 @@ local CraftingService    = require(Services:WaitForChild("CraftingService"))
 local WorldService       = require(Services:WaitForChild("WorldService"))
 local ResourceService    = require(Services:WaitForChild("ResourceService"))
 local EnemyService       = require(Services:WaitForChild("EnemyService"))
+local WildlifeService    = require(Services:WaitForChild("WildlifeService"))  -- NEW
 local CombatService      = require(Services:WaitForChild("CombatService"))
 local ProgressionService = require(Services:WaitForChild("ProgressionService"))
 local ObjectiveService   = require(Services:WaitForChild("ObjectiveService"))
 local PersistenceService = require(Services:WaitForChild("PersistenceService"))
 local ShopService        = require(Services:WaitForChild("ShopService"))
-local SleepService       = require(Services:WaitForChild("SleepService"))  -- NEW
+local SleepService       = require(Services:WaitForChild("SleepService"))
 
 local ctx = {
-    Config            = Config,
-    Remotes           = Remotes,
-    VitalsService     = VitalsService,
-    InventoryService  = InventoryService,
-    CraftingService   = CraftingService,
-    WorldService      = WorldService,
-    ResourceService   = ResourceService,
-    EnemyService      = EnemyService,
-    CombatService     = CombatService,
-    ProgressionService= ProgressionService,
-    ObjectiveService  = ObjectiveService,
-    PersistenceService= PersistenceService,
-    ShopService       = ShopService,
-    SleepService      = SleepService,   -- NEW
+    Config             = Config,
+    Remotes            = Remotes,
+    VitalsService      = VitalsService,
+    InventoryService   = InventoryService,
+    CraftingService    = CraftingService,
+    WorldService       = WorldService,
+    ResourceService    = ResourceService,
+    EnemyService       = EnemyService,
+    WildlifeService    = WildlifeService,   -- NEW
+    CombatService      = CombatService,
+    ProgressionService = ProgressionService,
+    ObjectiveService   = ObjectiveService,
+    PersistenceService = PersistenceService,
+    ShopService        = ShopService,
+    SleepService       = SleepService,
 }
 
 WorldService:init(ctx)
@@ -46,24 +47,26 @@ ResourceService:init(ctx)
 VitalsService:init(ctx)
 InventoryService:init(ctx)
 CraftingService:init(ctx)
+WildlifeService:init(ctx)   -- NEW (before Combat so Combat can reference it)
 EnemyService:init(ctx)
 CombatService:init(ctx)
 ProgressionService:init(ctx)
 ObjectiveService:init(ctx)
 PersistenceService:init(ctx)
 ShopService:init(ctx)
-SleepService:init(ctx)   -- NEW (after WorldService so Workspace is ready)
+SleepService:init(ctx)
 
 print("[Server] All services initialised.")
 
--- Respawn handler
 Remotes.RespawnRequest.OnServerEvent:Connect(function(player)
     player:LoadCharacter()
 end)
 
 local tickables = {
     WorldService, ResourceService,
-    VitalsService, EnemyService, CombatService,
+    VitalsService, EnemyService,
+    WildlifeService,   -- NEW
+    CombatService,
 }
 
 RunService.Heartbeat:Connect(function(dt)

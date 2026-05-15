@@ -1,4 +1,4 @@
--- Config.lua  (Milestone 6a — added Bedroll item + recipe)
+-- Config.lua  (Milestone 7 — added Wildlife block)
 local Config = {}
 
 -- ── Vitals ───────────────────────────────────────────────────────────────
@@ -38,7 +38,7 @@ Config.StatusThresholds = {
 Config.World = {
     Seed           = 42,
     HalfSize       = 600,
-    DayLengthSecs  = 480,   -- 8 real minutes = 1 in-game day
+    DayLengthSecs  = 480,
     NightStartClock= 19,
     NightEndClock  = 6,
 }
@@ -68,13 +68,42 @@ Config.Combat = {
         SpawnRadius = 220,
         MaxCount    = 6,
         Drops = {
-            { item = "RawMeat", min = 1, max = 3 },
-            { item = "Hide",    min = 1, max = 2 },
+            { item="RawMeat", min=1, max=3 },
+            { item="Hide",    min=1, max=2 },
         },
     },
 }
 
--- ── Progression ──────────────────────────────────────────────────────────
+-- ── Wildlife ──────────────────────────────────────────────────────────────
+Config.Wildlife = {
+    Rabbit = {
+        Count       = 12,
+        Health      = 15,
+        WanderSpeed = 4,
+        FleeSpeed   = 18,
+        FleeRadius  = 20,    -- studs; triggers flee state
+        RespawnTime = 60,    -- seconds before a new rabbit spawns
+        KillXp      = 10,
+        Drops = {
+            { item="RawMeat", min=1, max=2 },
+        },
+    },
+    Deer = {
+        Count       = 6,
+        Health      = 40,
+        WanderSpeed = 5,
+        FleeSpeed   = 22,
+        FleeRadius  = 30,
+        RespawnTime = 120,
+        KillXp      = 20,
+        Drops = {
+            { item="RawMeat", min=2, max=4 },
+            { item="Hide",    min=1, max=2 },
+        },
+    },
+}
+
+-- ── Progression ───────────────────────────────────────────────────────
 Config.Progression = {
     KillXp    = 25,
     CraftXp   = 10,
@@ -92,8 +121,7 @@ Config.Items = {
     RopeFiber   = { displayName="Rope Fiber",    category="resource", stackable=true },
     OldCloth    = { displayName="Old Cloth",     category="resource", stackable=true },
     Hide        = { displayName="Hide",          category="resource", stackable=true },
-    Bandage     = { displayName="Bandage",        category="tool",     stackable=true,
-                    onUse="curesBleeding" },
+    Bandage     = { displayName="Bandage",        category="tool",     stackable=true, onUse="curesBleeding" },
     RawMeat     = { displayName="Raw Meat",       category="food",     stackable=true,
                     food={ hungerRestore=20, thirstRestore=0 } },
     CookedMeat  = { displayName="Cooked Meat",    category="food",     stackable=true,
@@ -108,31 +136,20 @@ Config.Items = {
     WoodWall    = { displayName="Wood Wall",      category="structure",stackable=false },
     WoodFloor   = { displayName="Wood Floor",     category="structure",stackable=false },
     LeatherArmor= { displayName="Leather Armor",  category="armor",    stackable=false },
-
-    -- NEW: Bedroll
-    Bedroll     = {
-        displayName = "Bedroll",
-        category    = "structure",
-        stackable   = false,
-        -- Placing this item spawns a bedroll model in the world.
-        -- The sleep interaction is handled by SleepService (Milestone 6b).
-        placeable   = true,
-    },
+    Bedroll     = { displayName="Bedroll",        category="structure",stackable=false, placeable=true },
 }
 
 -- ── Crafting recipes ─────────────────────────────────────────────────────
 Config.Recipes = {
-    StoneAxe    = { category="Tools",    ingredients={ AshWood=2, Stone=3 },            result="StoneAxe",    amount=1 },
-    StoneSpear  = { category="Weapons",  ingredients={ AshWood=3, Flint=2 },            result="StoneSpear",  amount=1 },
-    Campfire    = { category="Survival", ingredients={ AshWood=5, Stone=4 },            result="Campfire",    amount=1 },
-    Bandage     = { category="Survival", ingredients={ Fiber=4,   OldCloth=2 },         result="Bandage",     amount=2 },
-    CookedMeat  = { category="Food",     ingredients={ RawMeat=1 },                     result="CookedMeat",  amount=1, nearFire=true },
-    WoodWall    = { category="Building", ingredients={ AshWood=6, RopeFiber=2 },        result="WoodWall",    amount=1 },
-    WoodFloor   = { category="Building", ingredients={ AshWood=4, RopeFiber=1 },        result="WoodFloor",   amount=1 },
-    LeatherArmor= { category="Armor",    ingredients={ Hide=6,    RopeFiber=3 },        result="LeatherArmor",amount=1 },
-
-    -- NEW: Bedroll recipe  (Survival tab, no fire needed)
-    Bedroll     = { category="Survival", ingredients={ Fiber=3, Hide=2, OldCloth=1 },   result="Bedroll",     amount=1 },
+    StoneAxe    = { category="Tools",    ingredients={ AshWood=2, Stone=3 },          result="StoneAxe",    amount=1 },
+    StoneSpear  = { category="Weapons",  ingredients={ AshWood=3, Flint=2 },          result="StoneSpear",  amount=1 },
+    Campfire    = { category="Survival", ingredients={ AshWood=5, Stone=4 },          result="Campfire",    amount=1 },
+    Bandage     = { category="Survival", ingredients={ Fiber=4,   OldCloth=2 },       result="Bandage",     amount=2 },
+    Bedroll     = { category="Survival", ingredients={ Fiber=3,   Hide=2, OldCloth=1},result="Bedroll",     amount=1 },
+    CookedMeat  = { category="Food",     ingredients={ RawMeat=1 },                   result="CookedMeat",  amount=1, nearFire=true },
+    WoodWall    = { category="Building", ingredients={ AshWood=6, RopeFiber=2 },      result="WoodWall",    amount=1 },
+    WoodFloor   = { category="Building", ingredients={ AshWood=4, RopeFiber=1 },      result="WoodFloor",   amount=1 },
+    LeatherArmor= { category="Armor",    ingredients={ Hide=6,    RopeFiber=3 },      result="LeatherArmor",amount=1 },
 }
 
 return Config

@@ -1,8 +1,8 @@
--- CombatService.lua  (Milestone 4)
--- Handles player attack requests.
--- Client fires AttackRequest { targetId } when the player clicks/swings.
--- Server validates distance, cooldown, equipped weapon, then applies damage
--- to the target (NightStalker model or another player).
+-- CombatService.lua  (Milestone 7)
+-- Changes from Milestone 4:
+--   • AttackRequest now also checks if the target Part belongs to a
+--     wildlife model (Rabbit / Deer) and routes damage to WildlifeService.
+--   • Target priority: NightStalker first, then Wildlife, then nothing.
 
 local Players   = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -10,109 +10,85 @@ local Workspace = game:GetService("Workspace")
 local CombatService = {}
 local ctx
 
--- Per-player attack cooldown tracker
-local cooldowns = {}   -- cooldowns[player] = time remaining
+local attackCooldowns = {}  -- attackCooldowns[player] = time remaining
 
--- ── Helpers ───────────────────────────────────────────────────────────────
-
-local function getEquippedWeapon(player)
-    -- Check if player has a weapon tool in their character
-    local char = player.Character
-    if not char then return nil end
-    for _, tool in ipairs(char:GetChildren()) do
-        if tool:IsA("Tool") then
-            -- Check if it's one of our weapon/tool items
-            local itemId = tool:GetAttribute("ItemId")
-            if itemId then
-                local cfg = ctx.Config.Items[itemId]
-                if cfg then return itemId, cfg end
-            end
+-- Damage by equipped weapon
+local function damageForPlayer(player)
+    local inv     = ctx.InventoryService:getAll(player)
+    local cfg     = ctx.Config.Combat
+    -- Check action bar slots 1-5 for a weapon
+    for i = 1, 5 do
+        local slot = inv[i]
+        if slot then
+            if slot.id == "StoneSpear" then return cfg.SpearDamage end
+            if slot.id == "StoneAxe"   then return cfg.AxeDamage   end
         end
     end
-    return nil
-end
-
-local function getWeaponDamage(itemId)
-    local cfg = ctx.Config.Combat
-    if itemId == "StoneAxe"   then return cfg.AxeDamage   end
-    if itemId == "StoneSpear" then return cfg.SpearDamage end
     return cfg.FistDamage
 end
 
--- Find which stalker model a given Part belongs to
-local function findStalkerModel(part)
-    local obj = part
-    while obj and obj.Parent do
-        if obj:IsA("Model") and obj.Name == "NightStalker" then
-            return obj
-        end
-        obj = obj.Parent
-    end
-    return nil
-end
-
--- ── Init ──────────────────────────────────────────────────────────────────
-
 function CombatService:init(context)
     ctx = context
+    attackCooldowns = {}
 
-    ctx.Remotes.AttackRequest.OnServerEvent:Connect(function(player, targetId)
-        self:handleAttack(player, targetId)
+    ctx.Remotes.AttackRequest.OnServerEvent:Connect(function(player, targetPartName)
+        -- Cooldown check
+        if attackCooldowns[player] and attackCooldowns[player] > 0 then return end
+        attackCooldowns[player] = ctx.Config.Combat.AttackCooldown
+
+        local damage = damageForPlayer(player)
+        local char   = player.Character
+        local root   = char and char:FindFirstChild("HumanoidRootPart")
+        if not root then return end
+
+        -- Find the target Part in Workspace by name
+        local targetPart = nil
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj:IsA("BasePart") and obj.Name == targetPartName then
+                targetPart = obj
+                break
+            end
+        end
+        if not targetPart then return end
+
+        -- Distance check (10 studs)
+        local dist = (root.Position - targetPart.Position).Magnitude
+        if dist > 10 then return end
+
+        -- ── Route: NightStalker ───────────────────────────────────────────────
+        local stalkerModel = targetPart:FindFirstAncestorOfClass("Model")
+        if stalkerModel and stalkerModel.Name == "NightStalker" then
+            ctx.EnemyService:registerHit(stalkerModel, player, damage)
+            return
+        end
+
+        -- ── Route: Wildlife ──────────────────────────────────────────────────
+        if ctx.WildlifeService then
+            -- Wildlife root parts are named "Root"
+            local wildlifeRoot = targetPart
+            if wildlifeRoot.Name ~= "Root" then
+                -- If player clicked a non-root part (leg, head etc.) find the root
+                local parentModel = targetPart:FindFirstAncestorOfClass("Model")
+                if parentModel then
+                    wildlifeRoot = parentModel:FindFirstChild("Root")
+                end
+            end
+            if wildlifeRoot then
+                local hit = ctx.WildlifeService:registerHit(wildlifeRoot, player, damage)
+                if hit then return end
+            end
+        end
     end)
-
-    -- Tick cooldowns down
-    -- (done inside CombatService:tick, called from Main.server)
-
-    -- Player touching a NightStalker is handled in EnemyService tick (melee range check)
-    -- This service handles PLAYER-INITIATED attacks (swing with tool)
 
     print("[CombatService] Initialised")
 end
 
-function CombatService:handleAttack(player, targetId)
-    -- Cooldown check
-    local cd = cooldowns[player] or 0
-    if cd > 0 then return end
-    cooldowns[player] = ctx.Config.Combat.AttackCooldown
-
-    -- Find target part in workspace
-    local targetPart = Workspace:FindFirstChild(targetId, true)
-    if not targetPart then return end
-
-    -- Distance check (must be within 10 studs)
-    local char = player.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    if (targetPart.Position - root.Position).Magnitude > 10 then return end
-
-    -- Determine damage
-    local itemId   = getEquippedWeapon(player)
-    local damage   = getWeaponDamage(itemId)
-
-    -- Is it a NightStalker?
-    local stalkerModel = findStalkerModel(targetPart)
-    if stalkerModel then
-        ctx.EnemyService:registerHit(stalkerModel, player, damage)
-        ctx.Remotes.Notify:FireClient(player, {
-            text  = "Hit! -" .. damage,
-            color = "yellow",
-        })
-        return
-    end
-
-    -- Could be another player (PvP) — skip for now (PvP not in scope yet)
-end
-
 function CombatService:tick(dt)
-    for player, cd in pairs(cooldowns) do
-        if cd > 0 then
-            cooldowns[player] = cd - dt
-        end
-    end
-    -- Clean up disconnected players
-    for player in pairs(cooldowns) do
-        if not player.Parent then
-            cooldowns[player] = nil
+    for player, cd in pairs(attackCooldowns) do
+        if player.Parent then
+            attackCooldowns[player] = math.max(0, cd - dt)
+        else
+            attackCooldowns[player] = nil
         end
     end
 end
