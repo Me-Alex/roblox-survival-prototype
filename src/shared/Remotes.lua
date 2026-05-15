@@ -9,12 +9,17 @@ local DEFINITIONS = {
 	WorldStateUpdated = "RemoteEvent",
 	ObjectiveUpdated = "RemoteEvent",
 	ProgressionUpdated = "RemoteEvent",
+	SaveStatusUpdated = "RemoteEvent",
 	Notification = "RemoteEvent",
+	ResourcePopup = "RemoteEvent",
+	HarvestAnimation = "RemoteEvent",
+	ShopOpened = "RemoteEvent",
 	CraftRequest = "RemoteFunction",
 	ConsumeRequest = "RemoteFunction",
 	BuildRequest = "RemoteFunction",
 	EquipRequest = "RemoteFunction",
 	AttackRequest = "RemoteFunction",
+	ShopRequest = "RemoteFunction",
 	GetInventory = "RemoteFunction",
 }
 

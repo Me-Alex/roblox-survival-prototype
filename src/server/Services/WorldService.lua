@@ -16,19 +16,398 @@ local currentWeatherId = "Clear"
 local day = 1
 local wasNight = false
 local visitedRegionsByPlayer = {}
+local lastRegionIdByPlayer = {}
+local structuresByName = {}
+local structureIndexBound = false
+local sessionStartedAt = os.clock()
+local worldPerformance = (Config.World and Config.World.Performance) or {}
+local LANDMARK_DETAIL_MULTIPLIER = math.clamp(tonumber(worldPerformance.LandmarkDetailMultiplier) or 1, 0.3, 1)
+local MAX_LANDMARK_POINT_LIGHTS = math.max(4, math.floor(tonumber(worldPerformance.MaxLandmarkPointLights) or 9999))
+local ENABLE_WORLD_POST_EFFECTS = worldPerformance.EnableWorldPostEffects ~= false
+local USE_FUTURE_LIGHTING = worldPerformance.UseFutureLighting == true
+local TONE_DOWN_SMOOTH_SURFACES = worldPerformance.ToneDownSmoothSurfaces ~= false
+
+local EARLY_WEATHER_WINDOW_SECONDS = 10 * 60
+local EARLY_WEATHER_WEIGHTS = {
+	Clear = 6,
+	Rain = 2,
+}
+
+local function cloneMap(source)
+	local copy = {}
+
+	if type(source) ~= "table" then
+		return copy
+	end
+
+	for key, value in pairs(source) do
+		copy[key] = value
+	end
+
+	return copy
+end
+
+local function markPlayerDirty(player)
+	if context and context.PersistenceService then
+		context.PersistenceService.markPlayerDirty(player)
+	end
+end
+
+local function detailCount(baseCount, minimumCount)
+	local base = math.max(0, math.floor(tonumber(baseCount) or 0))
+	if base <= 0 then
+		return 0
+	end
+
+	local minimum = math.max(1, math.floor(tonumber(minimumCount) or 1))
+	local scaled = math.floor(base * LANDMARK_DETAIL_MULTIPLIER + 0.5)
+	return math.max(minimum, scaled)
+end
+
+local function indexStructure(structure)
+	if not structure or not structure:IsA("Model") then
+		return
+	end
+
+	local bucket = structuresByName[structure.Name]
+	if not bucket then
+		bucket = {}
+		structuresByName[structure.Name] = bucket
+	end
+
+	bucket[structure] = true
+end
+
+local function unindexStructure(structure)
+	if not structure then
+		return
+	end
+
+	local bucket = structuresByName[structure.Name]
+	if not bucket then
+		return
+	end
+
+	bucket[structure] = nil
+	if next(bucket) == nil then
+		structuresByName[structure.Name] = nil
+	end
+end
+
+local function rebuildStructureIndex()
+	structuresByName = {}
+
+	if not structuresFolder then
+		return
+	end
+
+	for _, child in ipairs(structuresFolder:GetChildren()) do
+		indexStructure(child)
+	end
+end
+
+local function getStructuresByName(modelName)
+	local bucket = structuresByName[modelName]
+	local structures = {}
+
+	if not bucket then
+		return structures
+	end
+
+	for structure in pairs(bucket) do
+		if structure.Parent then
+			table.insert(structures, structure)
+		else
+			bucket[structure] = nil
+		end
+	end
+
+	if next(bucket) == nil then
+		structuresByName[modelName] = nil
+	end
+
+	return structures
+end
+
+local FORTRESS_THEME = {
+	Stone = Color3.fromRGB(91, 96, 99),
+	DarkStone = Color3.fromRGB(48, 51, 55),
+	WeatheredStone = Color3.fromRGB(132, 130, 121),
+	TrimStone = Color3.fromRGB(171, 158, 124),
+	Shadow = Color3.fromRGB(20, 22, 24),
+	Path = Color3.fromRGB(137, 112, 76),
+	Roof = Color3.fromRGB(96, 63, 50),
+	Wood = Color3.fromRGB(85, 55, 36),
+	FreshWood = Color3.fromRGB(128, 82, 43),
+	Canvas = Color3.fromRGB(187, 136, 76),
+	CanvasDark = Color3.fromRGB(88, 67, 57),
+	Mud = Color3.fromRGB(80, 64, 48),
+	Smoke = Color3.fromRGB(66, 69, 71),
+	Ember = Color3.fromRGB(227, 103, 50),
+	Torch = Color3.fromRGB(255, 166, 73),
+	Grass = Color3.fromRGB(55, 94, 61),
+	Water = Color3.fromRGB(47, 126, 148),
+	MarketBlue = Color3.fromRGB(75, 128, 163),
+	MarketRed = Color3.fromRGB(170, 75, 61),
+	MarketGold = Color3.fromRGB(220, 172, 86),
+	Reed = Color3.fromRGB(93, 127, 75),
+	Crystal = Color3.fromRGB(112, 166, 206),
+	Relic = Color3.fromRGB(132, 116, 194),
+}
+
+local MAP_ROUTES = {
+	{ "MarketCrossing", "FrostpineRise" },
+	{ "MarketCrossing", "GlasswaterFen" },
+	{ "MarketCrossing", "RustjawQuarry" },
+	{ "MarketCrossing", "WreckersCove" },
+	{ "FrostpineRise", "StarfallObservatory" },
+	{ "GlasswaterFen", "StarfallObservatory" },
+	{ "RustjawQuarry", "MoonwillowGrove" },
+	{ "WreckersCove", "AshfallFoundry" },
+	{ "MoonwillowGrove", "FrostpineRise" },
+	{ "AshfallFoundry", "GlasswaterFen" },
+	{ "RustjawQuarry", "WreckersCove" },
+	{ "StarfallObservatory", "AshfallFoundry" },
+}
+
+local LANDMARK_THEME_VERSION = "hearthmarket-isle-v2"
+local TERRAIN_THEME_VERSION = "hearthmarket-smooth-terrain-v1"
+
+local function clamp(value, minValue, maxValue)
+	return math.max(minValue, math.min(maxValue, value))
+end
+
+local function smoothStep(minValue, maxValue, value)
+	if value <= minValue then
+		return 0
+	end
+	if value >= maxValue then
+		return 1
+	end
+	local alpha = (value - minValue) / (maxValue - minValue)
+	return alpha * alpha * (3 - 2 * alpha)
+end
 
 local function createPart(name, size, cframe, color, parent)
 	local part = Instance.new("Part")
 	part.Name = name
 	part.Anchored = true
+	part.CanTouch = false
 	part.Size = size
 	part.CFrame = cframe
 	part.Color = color
-	part.Material = Enum.Material.SmoothPlastic
+	part.Material = TONE_DOWN_SMOOTH_SURFACES and Enum.Material.Plastic or Enum.Material.SmoothPlastic
+	part.Reflectance = 0
 	part.TopSurface = Enum.SurfaceType.Smooth
 	part.BottomSurface = Enum.SurfaceType.Smooth
 	part.Parent = parent
 	return part
+end
+
+local function sampleTerrainHeight(x, z)
+	local terrainConfig = Config.World.Terrain
+	if not terrainConfig or terrainConfig.Enabled == false then
+		return 0
+	end
+
+	local seed = Config.World.Seed
+	local primaryScale = terrainConfig.PrimaryNoiseScale or 178
+	local secondaryScale = terrainConfig.SecondaryNoiseScale or 68
+	local primary = math.noise((x + seed * 13.7) / primaryScale, (z - seed * 7.9) / primaryScale, seed * 0.013)
+	local secondary = math.noise((x - seed * 5.4) / secondaryScale, (z + seed * 9.2) / secondaryScale, seed * 0.027)
+	local height = primary * (terrainConfig.PrimaryAmplitude or 15) + secondary * (terrainConfig.SecondaryAmplitude or 7)
+
+	local extent = Config.World.SpawnAreaHalfSize * (terrainConfig.MeshExtentScale or 1.22)
+	local edgeRatio = clamp(Vector3.new(x, 0, z).Magnitude / math.max(extent, 1), 0, 1)
+	height -= (terrainConfig.EdgeFalloff or 10) * edgeRatio * edgeRatio
+
+	local spawnPoint = Config.World.SpawnPoint or Vector3.new(0, 0, 0)
+	local spawnDistance = (Vector3.new(x, 0, z) - Vector3.new(spawnPoint.X, 0, spawnPoint.Z)).Magnitude
+	local spawnFlattenRadius = terrainConfig.SpawnFlattenRadius or 120
+	local flattenWeight = 1 - smoothStep(spawnFlattenRadius * 0.4, spawnFlattenRadius, spawnDistance)
+	local flattenTarget = spawnPoint.Y
+
+	local regionFlattenRadius = terrainConfig.RegionFlattenRadius or 58
+	for _, region in ipairs(Config.Regions) do
+		local center = region.Center
+		local regionDistance = (Vector3.new(x, 0, z) - Vector3.new(center.X, 0, center.Z)).Magnitude
+		local regionWeight = 1 - smoothStep(regionFlattenRadius * 0.35, regionFlattenRadius, regionDistance)
+		if regionWeight > flattenWeight then
+			flattenWeight = regionWeight
+			flattenTarget = center.Y
+		end
+	end
+
+	height = height * (1 - flattenWeight) + flattenTarget * flattenWeight
+
+	return clamp(
+		height,
+		terrainConfig.HeightClampMin or -8,
+		terrainConfig.HeightClampMax or 30
+	)
+end
+
+local function getTerrainColor(height)
+	if height >= 28 then
+		return Color3.fromRGB(83, 88, 92), Enum.Material.Slate
+	end
+	if height >= 16 then
+		return Color3.fromRGB(114, 103, 82), Enum.Material.Ground
+	end
+	if height <= -4 then
+		return Color3.fromRGB(68, 102, 86), Enum.Material.Grass
+	end
+	if height <= 2 then
+		return Color3.fromRGB(62, 107, 74), Enum.Material.Grass
+	end
+	return FORTRESS_THEME.Grass, Enum.Material.Grass
+end
+
+local function setupTerrain(worldFolder)
+	local terrainConfig = Config.World.Terrain
+	if not terrainConfig or terrainConfig.Enabled == false then
+		return
+	end
+
+	local terrainFolder = worldFolder:FindFirstChild("TerrainMesh")
+	if not terrainFolder then
+		terrainFolder = Instance.new("Folder")
+		terrainFolder.Name = "TerrainMesh"
+		terrainFolder.Parent = worldFolder
+	end
+
+	if terrainFolder:GetAttribute("ThemeVersion") == TERRAIN_THEME_VERSION and terrainFolder:GetAttribute("TerrainMode") == "SmoothTerrain" then
+		return
+	end
+
+	for _, child in ipairs(terrainFolder:GetChildren()) do
+		child:Destroy()
+	end
+
+	terrainFolder:SetAttribute("ThemeVersion", TERRAIN_THEME_VERSION)
+	terrainFolder:SetAttribute("TerrainMode", "SmoothTerrain")
+
+	local terrain = Workspace.Terrain
+	terrain:Clear()
+	pcall(function()
+		terrain.Decoration = true
+		terrain.WaterColor = FORTRESS_THEME.Water
+		terrain.WaterTransparency = 0.22
+		terrain.WaterReflectance = 0.12
+		terrain.WaterWaveSize = 0.18
+		terrain.WaterWaveSpeed = 6
+	end)
+
+	local resolution = math.max(4, terrainConfig.SmoothResolution or 4)
+	local extent = Config.World.SpawnAreaHalfSize * (terrainConfig.MeshExtentScale or 1.22)
+	local maxCoord = math.floor(extent / resolution) * resolution
+	local minCoord = -maxCoord
+	local floorY = math.floor(((terrainConfig.HeightClampMin or -8) - 36) / resolution) * resolution
+	local ceilingY = math.ceil(((terrainConfig.HeightClampMax or 30) + 20) / resolution) * resolution
+	local xCellCount = math.floor((maxCoord - minCoord) / resolution)
+	local yCellCount = math.floor((ceilingY - floorY) / resolution)
+	local zCellCount = xCellCount
+	local chunkCells = 32
+
+	for xStartCell = 1, xCellCount, chunkCells do
+		local xEndCell = math.min(xStartCell + chunkCells - 1, xCellCount)
+		local chunkXCells = xEndCell - xStartCell + 1
+		local chunkMinX = minCoord + (xStartCell - 1) * resolution
+		local chunkMaxX = chunkMinX + chunkXCells * resolution
+		local heights = {}
+		local terrainMaterials = {}
+
+		for xIndex = 1, chunkXCells do
+			local worldX = chunkMinX + (xIndex - 0.5) * resolution
+			heights[xIndex] = {}
+			terrainMaterials[xIndex] = {}
+
+			for zIndex = 1, zCellCount do
+				local worldZ = minCoord + (zIndex - 0.5) * resolution
+				local topY = sampleTerrainHeight(worldX, worldZ)
+				local _, material = getTerrainColor(topY)
+				heights[xIndex][zIndex] = topY
+				terrainMaterials[xIndex][zIndex] = material
+			end
+		end
+
+		local materials = {}
+		local occupancies = {}
+
+		for xIndex = 1, chunkXCells do
+			materials[xIndex] = {}
+			occupancies[xIndex] = {}
+
+			for yIndex = 1, yCellCount do
+				local cellBottom = floorY + (yIndex - 1) * resolution
+				local cellTop = cellBottom + resolution
+				materials[xIndex][yIndex] = {}
+				occupancies[xIndex][yIndex] = {}
+
+				for zIndex = 1, zCellCount do
+					local topY = heights[xIndex][zIndex]
+					local occupancy = 0
+
+					if cellTop <= topY then
+						occupancy = 1
+					elseif cellBottom < topY then
+						occupancy = clamp((topY - cellBottom) / resolution, 0.08, 1)
+					end
+
+					occupancies[xIndex][yIndex][zIndex] = occupancy
+					materials[xIndex][yIndex][zIndex] = occupancy > 0 and terrainMaterials[xIndex][zIndex] or Enum.Material.Air
+				end
+			end
+		end
+
+		local region = Region3.new(
+			Vector3.new(chunkMinX, floorY, minCoord),
+			Vector3.new(chunkMaxX, ceilingY, maxCoord)
+		):ExpandToGrid(resolution)
+		terrain:WriteVoxels(region, resolution, materials, occupancies)
+	end
+end
+
+local function createGrassClump(position, parent)
+	for blade = 1, 5 do
+		local angle = (math.pi * 2) * (blade / 5) + decorRandom:NextNumber(-0.2, 0.2)
+		local height = decorRandom:NextNumber(1.8, 3.3)
+		local grass = createPart(
+			"GroundGrassBlade",
+			Vector3.new(0.16, height, 0.24),
+			CFrame.new(
+				position.X + math.cos(angle) * decorRandom:NextNumber(0.1, 0.55),
+				position.Y + height * 0.5,
+				position.Z + math.sin(angle) * decorRandom:NextNumber(0.1, 0.55)
+			) * CFrame.Angles(decorRandom:NextNumber(-0.18, 0.18), angle, decorRandom:NextNumber(-0.3, 0.3)),
+			blade % 2 == 0 and Color3.fromRGB(61, 104, 54) or Color3.fromRGB(45, 83, 47),
+			parent
+		)
+		grass.Material = Enum.Material.Grass
+		grass.CanCollide = false
+		grass.CanTouch = false
+		grass.CanQuery = false
+	end
+end
+
+local function createLeafLitter(position, parent)
+	local patch = createPart(
+		"LeafLitterPatch",
+		Vector3.new(decorRandom:NextNumber(2.5, 5.5), 0.08, decorRandom:NextNumber(1.6, 4.2)),
+		CFrame.new(position.X, position.Y + 0.06, position.Z) * CFrame.Angles(0, decorRandom:NextNumber(0, math.pi), 0),
+		decorRandom:NextNumber() > 0.5 and Color3.fromRGB(92, 67, 42) or Color3.fromRGB(63, 55, 37),
+		parent
+	)
+	patch.Material = Enum.Material.Ground
+	patch.Transparency = 0.14
+	patch.CanCollide = false
+	patch.CanTouch = false
+	patch.CanQuery = false
+end
+
+local function getSpawnPoint()
+	local spawnPoint = Config.World.SpawnPoint or Vector3.new(0, 0, 0)
+	return Vector3.new(spawnPoint.X, spawnPoint.Y, spawnPoint.Z)
 end
 
 local function getRoot(player)
@@ -87,32 +466,78 @@ local function getDiscoverableRegion(player)
 end
 
 local function setupLighting()
-	Lighting.ClockTime = 9
-	Lighting.Brightness = 2
-	Lighting.EnvironmentDiffuseScale = 0.58
-	Lighting.EnvironmentSpecularScale = 0.42
-	Lighting.ColorShift_Top = Color3.fromRGB(255, 232, 190)
-	Lighting.ColorShift_Bottom = Color3.fromRGB(102, 135, 119)
+	Lighting.ClockTime = 8.4
+	Lighting.Brightness = 2.45
+	Lighting.GlobalShadows = true
+	Lighting.ShadowSoftness = 0.38
+	Lighting.Ambient = Color3.fromRGB(67, 74, 67)
+	Lighting.OutdoorAmbient = Color3.fromRGB(116, 125, 111)
+	Lighting.EnvironmentDiffuseScale = 0.62
+	Lighting.EnvironmentSpecularScale = TONE_DOWN_SMOOTH_SURFACES and 0.22 or 0.48
+	Lighting.ColorShift_Top = Color3.fromRGB(255, 230, 188)
+	Lighting.ColorShift_Bottom = Color3.fromRGB(87, 111, 84)
+
+	pcall(function()
+		Lighting.Technology = USE_FUTURE_LIGHTING and Enum.Technology.Future or Enum.Technology.ShadowMap
+	end)
 
 	if not Lighting:FindFirstChild("SurvivalAtmosphere") then
 		local atmosphere = Instance.new("Atmosphere")
 		atmosphere.Name = "SurvivalAtmosphere"
-		atmosphere.Density = 0.28
-		atmosphere.Offset = 0.16
-		atmosphere.Color = Color3.fromRGB(207, 224, 219)
-		atmosphere.Decay = Color3.fromRGB(92, 112, 102)
+		atmosphere.Density = 0.38
+		atmosphere.Offset = 0.1
+		atmosphere.Color = Color3.fromRGB(214, 224, 226)
+		atmosphere.Decay = Color3.fromRGB(101, 96, 84)
 		atmosphere.Glare = 0.12
-		atmosphere.Haze = 1.25
+		atmosphere.Haze = 1.8
 		atmosphere.Parent = Lighting
 	end
 
 	if not Lighting:FindFirstChild("SurvivalSunRays") then
 		local sunRays = Instance.new("SunRaysEffect")
 		sunRays.Name = "SurvivalSunRays"
-		sunRays.Intensity = 0.035
-		sunRays.Spread = 0.82
+		sunRays.Intensity = 0.055
+		sunRays.Spread = 0.76
 		sunRays.Parent = Lighting
 	end
+	local sunRays = Lighting:FindFirstChild("SurvivalSunRays")
+	if sunRays then
+		sunRays.Enabled = ENABLE_WORLD_POST_EFFECTS
+	end
+
+	local bloom = Lighting:FindFirstChild("SurvivalBloom")
+	if not bloom then
+		bloom = Instance.new("BloomEffect")
+		bloom.Name = "SurvivalBloom"
+		bloom.Parent = Lighting
+	end
+	bloom.Intensity = 0.16
+	bloom.Size = 22
+	bloom.Threshold = 1.4
+	bloom.Enabled = ENABLE_WORLD_POST_EFFECTS
+
+	local depthOfField = Lighting:FindFirstChild("SurvivalDepthOfField")
+	if not depthOfField then
+		depthOfField = Instance.new("DepthOfFieldEffect")
+		depthOfField.Name = "SurvivalDepthOfField"
+		depthOfField.Parent = Lighting
+	end
+	depthOfField.FarIntensity = 0.08
+	depthOfField.FocusDistance = 85
+	depthOfField.InFocusRadius = 70
+	depthOfField.NearIntensity = 0
+	depthOfField.Enabled = ENABLE_WORLD_POST_EFFECTS
+
+	local colorGrade = Lighting:FindFirstChild("SurvivalColorGrade") or Lighting:FindFirstChild("FortressColorGrade")
+	if not colorGrade then
+		colorGrade = Instance.new("ColorCorrectionEffect")
+		colorGrade.Parent = Lighting
+	end
+	colorGrade.Name = "SurvivalColorGrade"
+	colorGrade.Brightness = -0.02
+	colorGrade.Contrast = 0.16
+	colorGrade.Saturation = 0.02
+	colorGrade.TintColor = Color3.fromRGB(244, 236, 217)
 end
 
 local function createRegionSign(region, parent)
@@ -151,6 +576,1075 @@ local function createRegionSign(region, parent)
 	label.Parent = surface
 end
 
+local function createTorch(cframe, parent)
+	local post = createPart("TorchPost", Vector3.new(0.45, 4, 0.45), cframe * CFrame.new(0, 2, 0), FORTRESS_THEME.Wood, parent)
+	post.Material = Enum.Material.Wood
+	post.CanCollide = false
+
+	local flame = createPart("TorchFlame", Vector3.new(0.9, 1.1, 0.9), cframe * CFrame.new(0, 4.35, 0), FORTRESS_THEME.Torch, parent)
+	flame.Shape = Enum.PartType.Ball
+	flame.Material = Enum.Material.Neon
+	flame.CanCollide = false
+	flame.CanQuery = false
+
+	local light = Instance.new("PointLight")
+	light.Name = "TorchLight"
+	light.Brightness = 1.5
+	light.Range = 18
+	light.Color = Color3.fromRGB(255, 157, 76)
+	light.Parent = flame
+end
+
+local function createEmberWindow(cframe, parent, size)
+	local window = createPart(
+		"EmberWindow",
+		size or Vector3.new(0.35, 2.8, 2.2),
+		cframe,
+		FORTRESS_THEME.Ember,
+		parent
+	)
+	window.Material = Enum.Material.Neon
+	window.CanCollide = false
+
+	local light = Instance.new("PointLight")
+	light.Name = "HearthGlow"
+	light.Brightness = 0.6
+	light.Range = 14
+	light.Color = Color3.fromRGB(255, 126, 64)
+	light.Parent = window
+end
+
+local function createBattlementWall(name, cframe, length, height, parent, depth)
+	depth = depth or 5
+
+	local wall = createPart(
+		name,
+		Vector3.new(length, height, depth),
+		cframe,
+		FORTRESS_THEME.Stone,
+		parent
+	)
+	wall.Material = Enum.Material.Slate
+
+	local merlonCount = math.max(3, math.floor(length / 8))
+	for index = 1, merlonCount do
+		local alpha = (index - 0.5) / merlonCount - 0.5
+		local merlon = createPart(
+			"Merlon",
+			Vector3.new(3.2, 3.6, depth + 0.6),
+			cframe * CFrame.new(alpha * length, height * 0.5 + 1.8, 0),
+			FORTRESS_THEME.WeatheredStone,
+			parent
+		)
+		merlon.Material = Enum.Material.Slate
+	end
+
+	return wall
+end
+
+local function createTowerCrenellations(cframe, width, height, parent)
+	local edge = width * 0.5 + 0.25
+	local topY = height * 0.5 + 3
+	local placements = {
+		{ -edge, -edge, 2.8, 2.8 },
+		{ edge, -edge, 2.8, 2.8 },
+		{ -edge, edge, 2.8, 2.8 },
+		{ edge, edge, 2.8, 2.8 },
+		{ 0, -edge, 4.2, 2.5 },
+		{ 0, edge, 4.2, 2.5 },
+		{ -edge, 0, 2.5, 4.2 },
+		{ edge, 0, 2.5, 4.2 },
+	}
+
+	for _, placement in ipairs(placements) do
+		local merlon = createPart(
+			"TowerMerlon",
+			Vector3.new(placement[3], 3.2, placement[4]),
+			cframe * CFrame.new(placement[1], topY, placement[2]),
+			FORTRESS_THEME.TrimStone,
+			parent
+		)
+		merlon.Material = Enum.Material.Slate
+	end
+end
+
+local function createFortressTower(name, cframe, width, height, parent)
+	local tower = createPart(name, Vector3.new(width, height, width), cframe, FORTRESS_THEME.DarkStone, parent)
+	tower.Material = Enum.Material.Slate
+
+	local plinth = createPart(
+		name .. "Plinth",
+		Vector3.new(width + 4.5, 2.2, width + 4.5),
+		cframe * CFrame.new(0, -height * 0.5 + 1.1, 0),
+		FORTRESS_THEME.Stone,
+		parent
+	)
+	plinth.Material = Enum.Material.Cobblestone
+
+	local cap = createPart(
+		name .. "Cap",
+		Vector3.new(width + 3.5, 3, width + 3.5),
+		cframe * CFrame.new(0, height * 0.5 + 1.5, 0),
+		FORTRESS_THEME.WeatheredStone,
+		parent
+	)
+	cap.Material = Enum.Material.Slate
+
+	for _, bandY in ipairs({ height * 0.24, height * 0.52, height * 0.78 }) do
+		local band = createPart(
+			name .. "StoneBand",
+			Vector3.new(width + 1.4, 1.2, width + 1.4),
+			cframe * CFrame.new(0, -height * 0.5 + bandY, 0),
+			FORTRESS_THEME.WeatheredStone,
+			parent
+		)
+		band.Material = Enum.Material.Slate
+	end
+
+	for _, windowY in ipairs({ height * 0.4, height * 0.66 }) do
+		local localY = -height * 0.5 + windowY
+
+		if windowY < height - 4 then
+			for side = -1, 1, 2 do
+				createEmberWindow(cframe * CFrame.new(side * (width * 0.5 + 0.03), localY, 0), parent)
+				createEmberWindow(
+					cframe * CFrame.new(0, localY, side * (width * 0.5 + 0.03)) * CFrame.Angles(0, math.rad(90), 0),
+					parent
+				)
+			end
+		end
+	end
+
+	createTowerCrenellations(cframe, width, height, parent)
+	return tower
+end
+
+local function createSteppedRoof(name, cframe, footprint, levels, parent)
+	for level = 1, levels do
+		local inset = (level - 1) * 2.4
+		local roof = createPart(
+			name .. "RoofTier",
+			Vector3.new(math.max(5, footprint.X - inset), 1.2, math.max(5, footprint.Z - inset)),
+			cframe * CFrame.new(0, (level - 1) * 1.1, 0),
+			FORTRESS_THEME.Roof,
+			parent
+		)
+		roof.Material = Enum.Material.WoodPlanks
+	end
+end
+
+local function createFortressBuilding(name, cframe, width, height, depth, parent)
+	local body = createPart(
+		name,
+		Vector3.new(width, height, depth),
+		cframe * CFrame.new(0, height * 0.5, 0),
+		FORTRESS_THEME.Stone,
+		parent
+	)
+	body.Material = Enum.Material.Slate
+
+	createSteppedRoof(name, cframe * CFrame.new(0, height + 1.2, 0), Vector3.new(width + 3.5, 0, depth + 3.5), 3, parent)
+
+	for side = -1, 1, 2 do
+		createEmberWindow(cframe * CFrame.new(side * (width * 0.5 + 0.03), height * 0.55, 0), parent, Vector3.new(0.3, 2.2, 1.8))
+	end
+
+	return body
+end
+
+local function createGatehouse(cframe, parent)
+	createFortressTower("SouthGateTowerWest", cframe * CFrame.new(-15, 14, 0), 12, 28, parent)
+	createFortressTower("SouthGateTowerEast", cframe * CFrame.new(15, 14, 0), 12, 28, parent)
+
+	local lintel = createPart(
+		"SouthGateLintel",
+		Vector3.new(20, 7, 6),
+		cframe * CFrame.new(0, 18, 0),
+		FORTRESS_THEME.WeatheredStone,
+		parent
+	)
+	lintel.Material = Enum.Material.Slate
+
+	for x = -2, 2 do
+		local bar = createPart(
+			"OpenPortcullisBar",
+			Vector3.new(0.35, 9, 0.35),
+			cframe * CFrame.new(x * 2, 8, -2.8),
+			Color3.fromRGB(55, 54, 51),
+			parent
+		)
+		bar.Material = Enum.Material.Metal
+		bar.CanCollide = false
+	end
+
+	createTorch(cframe * CFrame.new(-7.5, 0, -4), parent)
+	createTorch(cframe * CFrame.new(7.5, 0, -4), parent)
+end
+
+local function createFortressRuin(center, parent)
+	local baseCFrame = CFrame.new(center.X, 0, center.Z)
+	local spawnPoint = getSpawnPoint()
+	local spawnLocal = Vector3.new(spawnPoint.X - center.X, 0, spawnPoint.Z - center.Z)
+
+	local courtyard = createPart(
+		"CitadelCourtyard",
+		Vector3.new(94, 0.45, 84),
+		baseCFrame * CFrame.new(0, 0.24, 0),
+		Color3.fromRGB(89, 86, 80),
+		parent
+	)
+	courtyard.Material = Enum.Material.Cobblestone
+
+	local gateRoad = createPart("GateRoad", Vector3.new(13, 0.34, 68), baseCFrame * CFrame.new(0, 0.45, 9), FORTRESS_THEME.Path, parent)
+	gateRoad.Material = Enum.Material.Cobblestone
+
+	local crossRoad = createPart("CrossRoad", Vector3.new(70, 0.32, 10), baseCFrame * CFrame.new(0, 0.47, 13), FORTRESS_THEME.Path, parent)
+	crossRoad.Material = Enum.Material.Cobblestone
+
+	local spawnPlaza = createPart(
+		"CitadelSpawnPlaza",
+		Vector3.new(22, 0.38, 18),
+		CFrame.new(spawnPoint.X, 0.55, spawnPoint.Z),
+		FORTRESS_THEME.TrimStone,
+		parent
+	)
+	spawnPlaza.Material = Enum.Material.Cobblestone
+
+	createBattlementWall("NorthCurtainWall", baseCFrame * CFrame.new(0, 9, -38), 88, 18, parent)
+	createBattlementWall("SouthCurtainWest", baseCFrame * CFrame.new(-31, 6.5, 37), 28, 13, parent)
+	createBattlementWall("SouthCurtainEast", baseCFrame * CFrame.new(31, 6.5, 37), 28, 13, parent)
+	createBattlementWall("WestCurtainWall", baseCFrame * CFrame.new(-44, 8, 0) * CFrame.Angles(0, math.rad(90), 0), 76, 16, parent)
+	createBattlementWall("EastBrokenWallNorth", baseCFrame * CFrame.new(44, 7, -18) * CFrame.Angles(0, math.rad(90), 0), 36, 14, parent)
+	createBattlementWall("EastBrokenWallSouth", baseCFrame * CFrame.new(44, 5.5, 21) * CFrame.Angles(0, math.rad(90), 0), 28, 11, parent)
+	createGatehouse(baseCFrame * CFrame.new(0, 0, 37), parent)
+
+	for _, towerData in ipairs({
+		{ "NorthWestTower", -44, -38, 15, 34 },
+		{ "NorthEastTower", 44, -38, 15, 34 },
+		{ "WestForwardTower", -44, 37, 13, 26 },
+		{ "BrokenEastTower", 44, 37, 13, 20 },
+	}) do
+		createFortressTower(
+			towerData[1],
+			baseCFrame * CFrame.new(towerData[2], towerData[5] * 0.5, towerData[3]),
+			towerData[4],
+			towerData[5],
+			parent
+		)
+	end
+
+	local keep = createFortressTower("CentralKeep", baseCFrame * CFrame.new(0, 29, -12), 24, 58, parent)
+	keep.Color = Color3.fromRGB(68, 65, 60)
+
+	createSteppedRoof("KeepStepped", baseCFrame * CFrame.new(0, 60.5, -12), Vector3.new(34, 0, 34), 4, parent)
+
+	for level = 1, 3 do
+		local band = createPart(
+			"KeepStoneBand",
+			Vector3.new(25 + level * 4, 2.2, 25 + level * 4),
+			baseCFrame * CFrame.new(0, 16 + level * 12, -12),
+			FORTRESS_THEME.WeatheredStone,
+			parent
+		)
+		band.Material = Enum.Material.Slate
+	end
+
+	for side = -1, 1, 2 do
+		createEmberWindow(baseCFrame * CFrame.new(side * 12.2, 24, -17), parent)
+		createEmberWindow(baseCFrame * CFrame.new(side * 12.2, 42, -7), parent)
+	end
+
+	local doorway = createPart(
+		"KeepDoorShadow",
+		Vector3.new(9, 12, 0.45),
+		baseCFrame * CFrame.new(0, 6.4, 0.25),
+		FORTRESS_THEME.Shadow,
+		parent
+	)
+	doorway.Material = TONE_DOWN_SMOOTH_SURFACES and Enum.Material.Plastic or Enum.Material.SmoothPlastic
+	doorway.CanCollide = false
+
+	createFortressBuilding("BarracksWest", baseCFrame * CFrame.new(-25, 0, 13), 18, 13, 17, parent)
+	createFortressBuilding("SmithyEast", baseCFrame * CFrame.new(25, 0, 12), 19, 12, 18, parent)
+	createFortressBuilding("ChapelRuin", baseCFrame * CFrame.new(-21, 0, -21), 15, 16, 14, parent)
+
+	for _, torchOffset in ipairs({
+		Vector3.new(-8, 0, 3),
+		Vector3.new(8, 0, 3),
+		Vector3.new(-16, 0, 23),
+		Vector3.new(16, 0, 23),
+		Vector3.new(-34, 0, -28),
+		Vector3.new(34, 0, -28),
+	}) do
+		createTorch(baseCFrame * CFrame.new(torchOffset.X, torchOffset.Y, torchOffset.Z), parent)
+	end
+
+	for index = 1, detailCount(34, 14) do
+		local rubbleX = decorRandom:NextNumber(-39, 39)
+		local rubbleZ = decorRandom:NextNumber(-33, 33)
+		local awayFromSpawn = math.abs(rubbleX - spawnLocal.X) > 12 or math.abs(rubbleZ - spawnLocal.Z) > 10
+
+		if awayFromSpawn then
+			local rubble = createPart(
+				"CastleRubble",
+				Vector3.new(
+					decorRandom:NextNumber(1.3, 3.6),
+					decorRandom:NextNumber(0.8, 2.4),
+					decorRandom:NextNumber(1.2, 3.4)
+				),
+				baseCFrame * CFrame.new(rubbleX, 0.8, rubbleZ)
+					* CFrame.Angles(0, decorRandom:NextNumber(0, math.pi), decorRandom:NextNumber(-0.25, 0.25)),
+				index % 3 == 0 and FORTRESS_THEME.DarkStone or FORTRESS_THEME.WeatheredStone,
+				parent
+			)
+			rubble.Material = Enum.Material.Slate
+			rubble.CanCollide = false
+		end
+	end
+end
+
+local function createTallPine(cframe, parent, scale)
+	scale = scale or 1
+
+	local trunk = createPart(
+		"PineTrunk",
+		Vector3.new(1.6 * scale, 18 * scale, 1.6 * scale),
+		cframe * CFrame.new(0, 9 * scale, 0),
+		Color3.fromRGB(70, 47, 30),
+		parent
+	)
+	trunk.Shape = Enum.PartType.Cylinder
+	trunk.Material = Enum.Material.Wood
+	trunk.CanCollide = false
+
+	for tier = 1, 4 do
+		local width = (22 - tier * 3.2) * scale
+		local crown = createPart(
+			"PineBoughs",
+			Vector3.new(width, 8 * scale, width),
+			cframe * CFrame.new(0, (12 + tier * 5) * scale, 0),
+			Color3.fromRGB(34, 82, 48),
+			parent
+		)
+		crown.Shape = Enum.PartType.Ball
+		crown.Material = Enum.Material.Grass
+		crown.CanCollide = false
+	end
+end
+
+local function createLog(cframe, length, parent)
+	local log = createPart(
+		"StackedLog",
+		Vector3.new(2.4, length, 2.4),
+		cframe,
+		FORTRESS_THEME.FreshWood,
+		parent
+	)
+	log.Shape = Enum.PartType.Cylinder
+	log.Material = Enum.Material.Wood
+	log.CanCollide = false
+	return log
+end
+
+local function createCampfireScene(cframe, parent)
+	local base = createPart("CampfireAsh", Vector3.new(11, 0.2, 11), cframe * CFrame.new(0, 0.12, 0), Color3.fromRGB(54, 47, 40), parent)
+	base.Material = Enum.Material.Ground
+	base.CanCollide = false
+
+	local ringStoneCount = detailCount(12, 8)
+	for index = 1, ringStoneCount do
+		local angle = (math.pi * 2) * (index / ringStoneCount)
+		local stone = createPart(
+			"FireRingStone",
+			Vector3.new(1.4, 0.8, 1.2),
+			cframe * CFrame.new(math.cos(angle) * 4.2, 0.55, math.sin(angle) * 4.2) * CFrame.Angles(0, angle, 0),
+			Color3.fromRGB(117, 116, 106),
+			parent
+		)
+		stone.Shape = Enum.PartType.Ball
+		stone.Material = Enum.Material.Slate
+		stone.CanCollide = false
+	end
+
+	for index = 1, 3 do
+		createLog(
+			cframe * CFrame.new(0, 0.65, 0) * CFrame.Angles(math.rad(90), 0, math.rad(index * 60)),
+			7,
+			parent
+		)
+	end
+
+	local flame = createPart("CampfireFlame", Vector3.new(2.4, 3.4, 2.4), cframe * CFrame.new(0, 2, 0), FORTRESS_THEME.Torch, parent)
+	flame.Shape = Enum.PartType.Ball
+	flame.Material = Enum.Material.Neon
+	flame.CanCollide = false
+	flame.CanQuery = false
+
+	local light = Instance.new("PointLight")
+	light.Name = "CampWarmth"
+	light.Brightness = 2.4
+	light.Range = 34
+	light.Color = Color3.fromRGB(255, 158, 77)
+	light.Parent = flame
+
+	for layer = 1, 7 do
+		local smoke = createPart(
+			"SmokePlume",
+			Vector3.new(3 + layer * 0.55, 2.2 + layer * 0.25, 3 + layer * 0.55),
+			cframe * CFrame.new(decorRandom:NextNumber(-1.2, 1.2), 4.5 + layer * 3.2, decorRandom:NextNumber(-1.2, 1.2)),
+			FORTRESS_THEME.Smoke,
+			parent
+		)
+		smoke.Shape = Enum.PartType.Ball
+		smoke.Material = TONE_DOWN_SMOOTH_SURFACES and Enum.Material.Plastic or Enum.Material.SmoothPlastic
+		smoke.Transparency = 0.28 + layer * 0.07
+		smoke.CanCollide = false
+		smoke.CanTouch = false
+		smoke.CanQuery = false
+	end
+end
+
+local function createCanvasTent(name, cframe, parent)
+	local floor = createPart(name .. "GroundCloth", Vector3.new(16, 0.16, 20), cframe * CFrame.new(0, 0.16, 0), FORTRESS_THEME.CanvasDark, parent)
+	floor.Material = Enum.Material.Fabric
+	floor.CanCollide = false
+
+	local leftRoof = createPart(
+		name .. "RoofLeft",
+		Vector3.new(0.8, 8.5, 20),
+		cframe * CFrame.new(-2.7, 4.1, 0) * CFrame.Angles(0, 0, math.rad(-31)),
+		FORTRESS_THEME.Canvas,
+		parent
+	)
+	leftRoof.Material = Enum.Material.Fabric
+
+	local rightRoof = createPart(
+		name .. "RoofRight",
+		Vector3.new(0.8, 8.5, 20),
+		cframe * CFrame.new(2.7, 4.1, 0) * CFrame.Angles(0, 0, math.rad(31)),
+		FORTRESS_THEME.Canvas,
+		parent
+	)
+	rightRoof.Material = Enum.Material.Fabric
+
+	local ridge = createLog(cframe * CFrame.new(0, 7.4, 0) * CFrame.Angles(math.rad(90), 0, 0), 21, parent)
+	ridge.Name = name .. "RidgePole"
+
+	local flap = createPart(name .. "OpenFlap", Vector3.new(6, 5, 0.35), cframe * CFrame.new(0, 2.7, -10.2), FORTRESS_THEME.CanvasDark, parent)
+	flap.Material = Enum.Material.Fabric
+	flap.CanCollide = false
+end
+
+local function createWorkbenchShelter(cframe, parent)
+	local deck = createPart("WorkshopDeck", Vector3.new(36, 0.5, 24), cframe * CFrame.new(0, 0.32, 0), Color3.fromRGB(86, 57, 34), parent)
+	deck.Material = Enum.Material.WoodPlanks
+
+	for x = -1, 1, 2 do
+		for z = -1, 1, 2 do
+			local post = createPart(
+				"WorkshopPost",
+				Vector3.new(1.2, 8.5, 1.2),
+				cframe * CFrame.new(x * 16, 4.5, z * 10),
+				FORTRESS_THEME.Wood,
+				parent
+			)
+			post.Material = Enum.Material.Wood
+		end
+	end
+
+	local roof = createPart(
+		"WorkshopRoof",
+		Vector3.new(40, 1, 28),
+		cframe * CFrame.new(0, 9.3, 0) * CFrame.Angles(math.rad(-7), 0, 0),
+		FORTRESS_THEME.Roof,
+		parent
+	)
+	roof.Material = Enum.Material.WoodPlanks
+
+	local bench = createPart("WorkbenchPreview", Vector3.new(15, 1.2, 4), cframe * CFrame.new(-6, 3, 3), FORTRESS_THEME.FreshWood, parent)
+	bench.Material = Enum.Material.WoodPlanks
+
+	for x = -1, 1, 2 do
+		local leg = createPart("BenchLeg", Vector3.new(0.8, 4, 0.8), cframe * CFrame.new(-6 + x * 6, 1.8, 3), FORTRESS_THEME.Wood, parent)
+		leg.Material = Enum.Material.Wood
+	end
+
+	for index = 1, 5 do
+		local crate = createPart(
+			"SupplyCrate",
+			Vector3.new(3.8, 3.4, 3.8),
+			cframe * CFrame.new(6 + (index % 2) * 4, 1.9, -6 + math.floor(index / 2) * 4),
+			Color3.fromRGB(95, 69, 42),
+			parent
+		)
+		crate.Material = Enum.Material.WoodPlanks
+	end
+end
+
+local function createWatchtower(cframe, parent)
+	for x = -1, 1, 2 do
+		for z = -1, 1, 2 do
+			local post = createPart(
+				"WatchtowerPost",
+				Vector3.new(1.4, 23, 1.4),
+				cframe * CFrame.new(x * 8, 11.5, z * 8),
+				FORTRESS_THEME.Wood,
+				parent
+			)
+			post.Material = Enum.Material.Wood
+		end
+	end
+
+	local platform = createPart("WatchtowerPlatform", Vector3.new(22, 1, 22), cframe * CFrame.new(0, 21, 0), FORTRESS_THEME.FreshWood, parent)
+	platform.Material = Enum.Material.WoodPlanks
+
+	for z = -1, 1, 2 do
+		local rail = createPart("WatchtowerRail", Vector3.new(22, 1, 1), cframe * CFrame.new(0, 25, z * 11), FORTRESS_THEME.Wood, parent)
+		rail.Material = Enum.Material.Wood
+	end
+
+	for x = -1, 1, 2 do
+		local rail = createPart("WatchtowerRail", Vector3.new(1, 1, 22), cframe * CFrame.new(x * 11, 25, 0), FORTRESS_THEME.Wood, parent)
+		rail.Material = Enum.Material.Wood
+	end
+
+	for step = 1, 12 do
+		local stair = createPart(
+			"WatchtowerStair",
+			Vector3.new(5, 0.6, 1.5),
+			cframe * CFrame.new(-16 + step * 1.15, 1.5 + step * 1.45, 12.5),
+			FORTRESS_THEME.FreshWood,
+			parent
+		)
+		stair.Material = Enum.Material.WoodPlanks
+	end
+
+	for x = -1, 1, 2 do
+		for z = -1, 1, 2 do
+			local roofPost = createPart(
+				"WatchtowerRoofPost",
+				Vector3.new(0.8, 5.5, 0.8),
+				cframe * CFrame.new(x * 8.8, 27.5, z * 8.8),
+				FORTRESS_THEME.Wood,
+				parent
+			)
+			roofPost.Material = Enum.Material.Wood
+		end
+	end
+
+	local roof = createPart("WatchtowerRoof", Vector3.new(27, 1.2, 27), cframe * CFrame.new(0, 31, 0), FORTRESS_THEME.Roof, parent)
+	roof.Material = Enum.Material.WoodPlanks
+end
+
+local function createSurvivalOutpost(center, parent)
+	local baseCFrame = CFrame.new(center.X, 0, center.Z)
+	local spawnPoint = getSpawnPoint()
+
+	local clearing = createPart(
+		"OutpostClearing",
+		Vector3.new(138, 0.24, 116),
+		baseCFrame * CFrame.new(8, 0.14, 16),
+		Color3.fromRGB(62, 91, 54),
+		parent
+	)
+	clearing.Material = Enum.Material.Grass
+	clearing.CanCollide = false
+
+	local mainPath = createPart(
+		"MuddyCampPath",
+		Vector3.new(18, 0.22, 106),
+		baseCFrame * CFrame.new(0, 0.3, 12),
+		FORTRESS_THEME.Mud,
+		parent
+	)
+	mainPath.Material = Enum.Material.Ground
+	mainPath.CanCollide = false
+
+	local crossPath = createPart(
+		"MuddyCampCrossPath",
+		Vector3.new(96, 0.2, 14),
+		baseCFrame * CFrame.new(8, 0.32, 18),
+		FORTRESS_THEME.Mud,
+		parent
+	)
+	crossPath.Material = Enum.Material.Ground
+	crossPath.CanCollide = false
+
+	createCampfireScene(baseCFrame * CFrame.new(16, 0, 20), parent)
+	createWatchtower(baseCFrame * CFrame.new(48, 0, -32) * CFrame.Angles(0, math.rad(-16), 0), parent)
+	createWorkbenchShelter(baseCFrame * CFrame.new(40, 0, 36) * CFrame.Angles(0, math.rad(-16), 0), parent)
+	createCanvasTent("NorthTent", baseCFrame * CFrame.new(-31, 0, -8) * CFrame.Angles(0, math.rad(18), 0), parent)
+	createCanvasTent("SouthTent", baseCFrame * CFrame.new(-45, 0, 26) * CFrame.Angles(0, math.rad(-24), 0), parent)
+
+	for index = 1, detailCount(9, 6) do
+		local log = createLog(
+			baseCFrame
+				* CFrame.new(-7 + (index % 3) * 3, 1 + math.floor((index - 1) / 3) * 2.2, -38)
+				* CFrame.Angles(math.rad(90), math.rad(90), 0),
+			18,
+			parent
+		)
+		log.Name = "CampLogPile"
+	end
+
+	for index = 1, detailCount(44, 18) do
+		local angle = decorRandom:NextNumber(0, math.pi * 2)
+		local radius = decorRandom:NextNumber(76, 168)
+		local x = center.X + math.cos(angle) * radius
+		local z = center.Z + math.sin(angle) * radius
+
+		if (Vector3.new(x, 0, z) - Vector3.new(spawnPoint.X, 0, spawnPoint.Z)).Magnitude > 32 then
+			createTallPine(
+				CFrame.new(x, 0, z) * CFrame.Angles(0, decorRandom:NextNumber(0, math.pi * 2), 0),
+				parent,
+				decorRandom:NextNumber(0.82, 1.25)
+			)
+		end
+	end
+
+	for index = 1, detailCount(10, 6) do
+		local rock = createPart(
+			"CampBoulder",
+			Vector3.new(decorRandom:NextNumber(3, 7), decorRandom:NextNumber(1.4, 3.2), decorRandom:NextNumber(3, 7)),
+			baseCFrame * CFrame.new(decorRandom:NextNumber(-58, 66), 0.9, decorRandom:NextNumber(-50, 58)),
+			Color3.fromRGB(92, 97, 91),
+			parent
+		)
+		rock.Shape = Enum.PartType.Ball
+		rock.Material = Enum.Material.Slate
+		rock.CanCollide = false
+	end
+
+	for index = 1, detailCount(8, 4) do
+		local bird = createPart(
+			"SkyBird",
+			Vector3.new(2.5, 0.12, 0.12),
+			baseCFrame * CFrame.new(decorRandom:NextNumber(-95, 95), decorRandom:NextNumber(52, 76), decorRandom:NextNumber(-95, 45))
+				* CFrame.Angles(0, decorRandom:NextNumber(0, math.pi * 2), math.rad(18)),
+			Color3.fromRGB(50, 53, 50),
+			parent
+		)
+		bird.CanCollide = false
+		bird.CanTouch = false
+		bird.CanQuery = false
+	end
+end
+
+local function createWaterPatch(name, cframe, size, parent, color)
+	local water = createPart(name, size, cframe, color or FORTRESS_THEME.Water, parent)
+	water.Material = Enum.Material.Glass
+	water.Transparency = 0.24
+	water.CanCollide = false
+	water.CanTouch = false
+	water.CanQuery = true
+	water:SetAttribute("SurvivalSwimWater", true)
+	return water
+end
+
+local function createMarketCanopy(name, cframe, color, parent, width, depth)
+	width = width or 18
+	depth = depth or 14
+
+	local deck = createPart(name .. "Deck", Vector3.new(width + 2, 0.35, depth + 2), cframe * CFrame.new(0, 0.22, 0), FORTRESS_THEME.Path, parent)
+	deck.Material = Enum.Material.WoodPlanks
+
+	for x = -1, 1, 2 do
+		for z = -1, 1, 2 do
+			local post = createPart(
+				name .. "Post",
+				Vector3.new(0.7, 7, 0.7),
+				cframe * CFrame.new(x * width * 0.43, 3.6, z * depth * 0.42),
+				FORTRESS_THEME.Wood,
+				parent
+			)
+			post.Material = Enum.Material.Wood
+		end
+	end
+
+	local awning = createPart(
+		name .. "Awning",
+		Vector3.new(width, 0.55, depth),
+		cframe * CFrame.new(0, 7.2, 0) * CFrame.Angles(math.rad(-4), 0, 0),
+		color,
+		parent
+	)
+	awning.Material = Enum.Material.Fabric
+	awning.CanCollide = false
+
+	local counter = createPart(
+		name .. "Counter",
+		Vector3.new(width - 5, 2.4, 2.2),
+		cframe * CFrame.new(0, 1.6, -depth * 0.25),
+		FORTRESS_THEME.FreshWood,
+		parent
+	)
+	counter.Material = Enum.Material.WoodPlanks
+
+	for index = 1, 4 do
+		local crate = createPart(
+			name .. "Crate",
+			Vector3.new(2.8, 2.4, 2.8),
+			cframe * CFrame.new(-width * 0.33 + index * 2.4, 1.4, depth * 0.24 + (index % 2) * 1.8),
+			Color3.fromRGB(108, 75, 44),
+			parent
+		)
+		crate.Material = Enum.Material.WoodPlanks
+		crate.CanCollide = false
+	end
+end
+
+local function createMarketCrossing(center, parent)
+	local baseCFrame = CFrame.new(center.X, 0, center.Z)
+	local spawnPoint = getSpawnPoint()
+
+	local plaza = createPart(
+		"MarketStonePlaza",
+		Vector3.new(126, 0.42, 118),
+		baseCFrame * CFrame.new(0, 0.26, 2),
+		Color3.fromRGB(122, 112, 93),
+		parent
+	)
+	plaza.Material = Enum.Material.Cobblestone
+
+	local northRoad = createPart("NorthSouthMarketRoad", Vector3.new(18, 0.28, 178), baseCFrame * CFrame.new(0, 0.36, -8), FORTRESS_THEME.Path, parent)
+	northRoad.Material = Enum.Material.Ground
+
+	local eastRoad = createPart("EastWestMarketRoad", Vector3.new(176, 0.28, 18), baseCFrame * CFrame.new(0, 0.38, 18), FORTRESS_THEME.Path, parent)
+	eastRoad.Material = Enum.Material.Ground
+
+	local spawnPad = createPart(
+		"MarketSpawnCompass",
+		Vector3.new(28, 0.35, 28),
+		CFrame.new(spawnPoint.X, 0.64, spawnPoint.Z),
+		FORTRESS_THEME.TrimStone,
+		parent
+	)
+	spawnPad.Material = Enum.Material.Cobblestone
+
+	local ringPaverCount = detailCount(16, 10)
+	for index = 1, ringPaverCount do
+		local angle = (math.pi * 2) * (index / ringPaverCount)
+		local paver = createPart(
+			"MarketRingPaver",
+			Vector3.new(5.5, 0.28, 2.4),
+			baseCFrame * CFrame.new(math.cos(angle) * 48, 0.64, 2 + math.sin(angle) * 42) * CFrame.Angles(0, -angle, 0),
+			index % 2 == 0 and FORTRESS_THEME.WeatheredStone or FORTRESS_THEME.TrimStone,
+			parent
+		)
+		paver.Material = Enum.Material.Cobblestone
+		paver.CanCollide = false
+	end
+
+	createCampfireScene(baseCFrame * CFrame.new(0, 0, 18), parent)
+	createMarketCanopy("ProvisionCanopy", baseCFrame * CFrame.new(-34, 0, -24) * CFrame.Angles(0, math.rad(146), 0), FORTRESS_THEME.MarketRed, parent, 16, 12)
+	createMarketCanopy("MapCanopy", baseCFrame * CFrame.new(38, 0, -22) * CFrame.Angles(0, math.rad(-142), 0), FORTRESS_THEME.MarketBlue, parent, 16, 12)
+	createWorkbenchShelter(baseCFrame * CFrame.new(58, 0, 24) * CFrame.Angles(0, math.rad(-90), 0), parent)
+
+	local well = createPart("MarketWellBase", Vector3.new(14, 2.2, 14), baseCFrame * CFrame.new(-2, 1.1, -42), FORTRESS_THEME.WeatheredStone, parent)
+	well.Shape = Enum.PartType.Cylinder
+	well.Material = Enum.Material.Cobblestone
+	createWaterPatch("MarketWellWater", baseCFrame * CFrame.new(-2, 2.36, -42), Vector3.new(10, 0.32, 10), parent)
+
+	for _, offset in ipairs({
+		Vector3.new(-54, 0, 52),
+		Vector3.new(54, 0, 50),
+		Vector3.new(-56, 0, -50),
+		Vector3.new(56, 0, -48),
+		Vector3.new(-76, 0, 4),
+		Vector3.new(76, 0, 4),
+	}) do
+		createTorch(baseCFrame * CFrame.new(offset.X, offset.Y, offset.Z), parent)
+	end
+
+	for index = 1, detailCount(30, 12) do
+		local angle = decorRandom:NextNumber(0, math.pi * 2)
+		local radius = decorRandom:NextNumber(78, 150)
+		local x = center.X + math.cos(angle) * radius
+		local z = center.Z + math.sin(angle) * radius
+		if (Vector3.new(x, 0, z) - Vector3.new(spawnPoint.X, 0, spawnPoint.Z)).Magnitude > 44 then
+			createTallPine(
+				CFrame.new(x, 0, z) * CFrame.Angles(0, decorRandom:NextNumber(0, math.pi * 2), 0),
+				parent,
+				decorRandom:NextNumber(0.68, 1.05)
+			)
+		end
+	end
+end
+
+local function createFrostpineRise(center, parent)
+	local baseCFrame = CFrame.new(center.X, 0, center.Z)
+
+	local ridge = createPart("FrostpineRidgeShelf", Vector3.new(118, 0.34, 84), baseCFrame * CFrame.new(0, 0.22, 0), Color3.fromRGB(71, 99, 91), parent)
+	ridge.Material = Enum.Material.Grass
+	ridge.Transparency = 0.08
+	ridge.CanCollide = false
+
+	createWaterPatch("ColdCreek", baseCFrame * CFrame.new(18, 0.18, -4) * CFrame.Angles(0, math.rad(18), 0), Vector3.new(82, 0.34, 14), parent, Color3.fromRGB(72, 142, 165))
+	createWatchtower(baseCFrame * CFrame.new(-38, 0, 18) * CFrame.Angles(0, math.rad(34), 0), parent)
+
+	for index = 1, detailCount(58, 24) do
+		local angle = decorRandom:NextNumber(0, math.pi * 2)
+		local radius = decorRandom:NextNumber(28, 170)
+		local x = center.X + math.cos(angle) * radius
+		local z = center.Z + math.sin(angle) * radius
+		createTallPine(
+			CFrame.new(x, sampleTerrainHeight(x, z), z) * CFrame.Angles(0, decorRandom:NextNumber(0, math.pi * 2), 0),
+			parent,
+			decorRandom:NextNumber(0.86, 1.42)
+		)
+	end
+
+	for index = 1, detailCount(9, 5) do
+		createLog(
+			baseCFrame * CFrame.new(-24 + index * 5, 1.2, -28) * CFrame.Angles(math.rad(90), math.rad(90), 0),
+			16,
+			parent
+		)
+	end
+end
+
+local function createGlasswaterFen(center, parent)
+	local baseCFrame = CFrame.new(center.X, 0, center.Z)
+	local poolOffsets = {
+		Vector3.new(-22, 0, -10),
+		Vector3.new(20, 0, 12),
+		Vector3.new(2, 0, 40),
+	}
+
+	for index, offset in ipairs(poolOffsets) do
+		createWaterPatch(
+			"GlasswaterPool",
+			baseCFrame * CFrame.new(offset.X, 0.16, offset.Z) * CFrame.Angles(0, index * 0.42, 0),
+			Vector3.new(46 - index * 3, 0.42, 30 + index * 5),
+			parent,
+			Color3.fromRGB(63, 151, 155)
+		)
+	end
+
+	local boardwalk = createPart("FenBoardwalk", Vector3.new(96, 0.42, 7), baseCFrame * CFrame.new(2, 0.54, 12) * CFrame.Angles(0, math.rad(-17), 0), FORTRESS_THEME.FreshWood, parent)
+	boardwalk.Material = Enum.Material.WoodPlanks
+
+	for index = 1, detailCount(34, 14) do
+		local angle = decorRandom:NextNumber(0, math.pi * 2)
+		local radius = decorRandom:NextNumber(20, 92)
+		local reed = createPart(
+			"FenReed",
+			Vector3.new(0.45, decorRandom:NextNumber(4.5, 8.5), 0.45),
+			baseCFrame * CFrame.new(math.cos(angle) * radius, 3.2, math.sin(angle) * radius),
+			FORTRESS_THEME.Reed,
+			parent
+		)
+		reed.Material = Enum.Material.Grass
+		reed.CanCollide = false
+	end
+
+	for index = 1, detailCount(11, 6) do
+		local shard = createPart(
+			"GlasswaterShard",
+			Vector3.new(1.8, decorRandom:NextNumber(6, 12), 1.8),
+			baseCFrame * CFrame.new(decorRandom:NextNumber(-48, 50), 3.5, decorRandom:NextNumber(-48, 52))
+				* CFrame.Angles(decorRandom:NextNumber(-0.22, 0.22), decorRandom:NextNumber(0, math.pi), decorRandom:NextNumber(-0.18, 0.18)),
+			FORTRESS_THEME.Crystal,
+			parent
+		)
+		shard.Material = Enum.Material.Glass
+		shard.Transparency = 0.1
+		shard.CanCollide = false
+	end
+end
+
+local function createRustjawQuarry(center, parent)
+	local baseCFrame = CFrame.new(center.X, 0, center.Z)
+
+	local pit = createPart("QuarryPitFloor", Vector3.new(116, 0.36, 92), baseCFrame * CFrame.new(0, 0.18, 0), Color3.fromRGB(111, 94, 79), parent)
+	pit.Material = Enum.Material.Slate
+	pit.Transparency = 0.08
+
+	local quarryWallCount = detailCount(26, 12)
+	for index = 1, quarryWallCount do
+		local angle = (math.pi * 2) * (index / quarryWallCount)
+		local radiusX = 64 + decorRandom:NextNumber(-7, 8)
+		local radiusZ = 48 + decorRandom:NextNumber(-5, 7)
+		local wall = createPart(
+			"QuarryRimBoulder",
+			Vector3.new(decorRandom:NextNumber(5, 11), decorRandom:NextNumber(4, 10), decorRandom:NextNumber(5, 11)),
+			baseCFrame * CFrame.new(math.cos(angle) * radiusX, 2.4, math.sin(angle) * radiusZ),
+			Color3.fromRGB(89, 85, 80),
+			parent
+		)
+		wall.Shape = Enum.PartType.Ball
+		wall.Material = Enum.Material.Slate
+	end
+
+	local gantryA = createPart("QuarryGantryA", Vector3.new(3, 24, 3), baseCFrame * CFrame.new(-28, 12, -18), FORTRESS_THEME.Wood, parent)
+	gantryA.Material = Enum.Material.Wood
+	local gantryB = createPart("QuarryGantryB", Vector3.new(3, 24, 3), baseCFrame * CFrame.new(28, 12, -18), FORTRESS_THEME.Wood, parent)
+	gantryB.Material = Enum.Material.Wood
+	local beam = createPart("QuarryGantryBeam", Vector3.new(64, 3, 3), baseCFrame * CFrame.new(0, 24, -18), FORTRESS_THEME.FreshWood, parent)
+	beam.Material = Enum.Material.WoodPlanks
+	local chain = createPart("QuarryLiftChain", Vector3.new(0.55, 13, 0.55), baseCFrame * CFrame.new(0, 16, -18), Color3.fromRGB(60, 57, 54), parent)
+	chain.Material = Enum.Material.Metal
+
+end
+
+local function createWreckersCove(center, parent)
+	local baseCFrame = CFrame.new(center.X, 0, center.Z)
+
+	local beach = createPart("CoveBeach", Vector3.new(128, 0.28, 92), baseCFrame * CFrame.new(0, 0.18, 8), Color3.fromRGB(131, 119, 91), parent)
+	beach.Material = Enum.Material.Sand
+	beach.CanCollide = false
+
+	createWaterPatch("CoveWaterline", baseCFrame * CFrame.new(16, 0.05, 46), Vector3.new(146, 0.38, 48), parent, Color3.fromRGB(52, 126, 155))
+
+	local dock = createPart("CoveDock", Vector3.new(12, 0.6, 58), baseCFrame * CFrame.new(-30, 0.7, 26), FORTRESS_THEME.FreshWood, parent)
+	dock.Material = Enum.Material.WoodPlanks
+
+	for index = 1, 4 do
+		local rib = createPart(
+			"WreckedHullRib",
+			Vector3.new(2.2, 16, 28),
+			baseCFrame * CFrame.new(18 + index * 5, 5.5, 34 - index * 2) * CFrame.Angles(math.rad(18), math.rad(-28), 0),
+			FORTRESS_THEME.Wood,
+			parent
+		)
+		rib.Material = Enum.Material.Wood
+	end
+
+	local mast = createLog(baseCFrame * CFrame.new(20, 10, 22) * CFrame.Angles(math.rad(63), math.rad(18), 0), 42, parent)
+	mast.Name = "BrokenShipMast"
+
+	createCanvasTent("WreckerTent", baseCFrame * CFrame.new(-8, 0, -22) * CFrame.Angles(0, math.rad(28), 0), parent)
+
+	for index = 1, 18 do
+		local crate = createPart(
+			"WashedCrate",
+			Vector3.new(decorRandom:NextNumber(2.2, 4.2), decorRandom:NextNumber(1.8, 3.6), decorRandom:NextNumber(2.2, 4.2)),
+			baseCFrame * CFrame.new(decorRandom:NextNumber(-52, 60), 1.2, decorRandom:NextNumber(-35, 42)) * CFrame.Angles(0, decorRandom:NextNumber(0, math.pi), 0),
+			Color3.fromRGB(100, 69, 43),
+			parent
+		)
+		crate.Material = Enum.Material.WoodPlanks
+		crate.CanCollide = false
+	end
+end
+
+local function createMoonwillowGrove(center, parent)
+	local baseCFrame = CFrame.new(center.X, 0, center.Z)
+
+	local glade = createPart("MoonwillowGlade", Vector3.new(122, 0.25, 104), baseCFrame * CFrame.new(0, 0.16, 0), Color3.fromRGB(50, 92, 78), parent)
+	glade.Material = Enum.Material.Grass
+	glade.Transparency = 0.08
+	glade.CanCollide = false
+
+	local moonwillowRingCount = detailCount(12, 6)
+	for index = 1, moonwillowRingCount do
+		local angle = (math.pi * 2) * (index / moonwillowRingCount)
+		local x = math.cos(angle) * 44
+		local z = math.sin(angle) * 36
+		createTallPine(baseCFrame * CFrame.new(x, 0, z) * CFrame.Angles(0, angle, 0), parent, 1.15)
+		local lantern = createPart("MoonwillowLantern", Vector3.new(1.1, 1.1, 1.1), baseCFrame * CFrame.new(x * 0.84, 10, z * 0.84), FORTRESS_THEME.Relic, parent)
+		lantern.Shape = Enum.PartType.Ball
+		lantern.Material = Enum.Material.Neon
+		lantern.CanCollide = false
+		local light = Instance.new("PointLight")
+		light.Name = "MoonwillowGlow"
+		light.Brightness = 0.85
+		light.Range = 16
+		light.Color = FORTRESS_THEME.Relic
+		light.Parent = lantern
+	end
+
+	local shrine = createPart("GroveShrine", Vector3.new(18, 1.2, 18), baseCFrame * CFrame.new(0, 0.8, 0), FORTRESS_THEME.WeatheredStone, parent)
+	shrine.Material = Enum.Material.Cobblestone
+	local obelisk = createPart("GroveObelisk", Vector3.new(4, 18, 4), baseCFrame * CFrame.new(0, 9.8, 0), FORTRESS_THEME.Relic, parent)
+	obelisk.Material = Enum.Material.Slate
+end
+
+local function createAshfallFoundry(center, parent)
+	local baseCFrame = CFrame.new(center.X, 0, center.Z)
+
+	local yard = createPart("FoundryYard", Vector3.new(124, 0.45, 104), baseCFrame * CFrame.new(0, 0.25, 0), Color3.fromRGB(96, 78, 67), parent)
+	yard.Material = Enum.Material.Cobblestone
+
+	for _, offset in ipairs({
+		Vector3.new(-28, 0, -14),
+		Vector3.new(24, 0, 18),
+	}) do
+		local furnace = createPart("FoundryFurnace", Vector3.new(18, 22, 18), baseCFrame * CFrame.new(offset.X, 11, offset.Z), FORTRESS_THEME.DarkStone, parent)
+		furnace.Material = Enum.Material.Slate
+		local mouth = createPart("FurnaceMouth", Vector3.new(10, 8, 0.5), baseCFrame * CFrame.new(offset.X, 6, offset.Z - 9.2), FORTRESS_THEME.Ember, parent)
+		mouth.Material = Enum.Material.Neon
+		mouth.CanCollide = false
+		local stack = createPart("FoundryStack", Vector3.new(7, 28, 7), baseCFrame * CFrame.new(offset.X, 34, offset.Z), FORTRESS_THEME.Smoke, parent)
+		stack.Shape = Enum.PartType.Cylinder
+		stack.Material = Enum.Material.Metal
+		createTorch(baseCFrame * CFrame.new(offset.X + 13, 0, offset.Z - 12), parent)
+	end
+
+	for index = -1, 1 do
+		local channel = createPart(
+			"MoltenRunoff",
+			Vector3.new(7, 0.28, 76),
+			baseCFrame * CFrame.new(index * 18, 0.72, 0) * CFrame.Angles(0, math.rad(index * 8), 0),
+			FORTRESS_THEME.Ember,
+			parent
+		)
+		channel.Material = Enum.Material.Neon
+		channel.CanCollide = false
+	end
+
+end
+
+local function createStarfallObservatory(center, parent)
+	local baseCFrame = CFrame.new(center.X, 0, center.Z)
+
+	local platform = createPart("ObservatoryPlatform", Vector3.new(104, 0.5, 104), baseCFrame * CFrame.new(0, 0.3, 0), Color3.fromRGB(94, 90, 116), parent)
+	platform.Material = Enum.Material.Slate
+
+	local observatoryRingSegments = detailCount(16, 10)
+	for ring = 1, 3 do
+		local radius = 18 + ring * 15
+		for index = 1, observatoryRingSegments do
+			local angle = (math.pi * 2) * (index / observatoryRingSegments)
+			local stone = createPart(
+				"ObservatoryRingStone",
+				Vector3.new(4.6, 0.7, 2.1),
+				baseCFrame * CFrame.new(math.cos(angle) * radius, 0.86 + ring * 0.08, math.sin(angle) * radius) * CFrame.Angles(0, -angle, 0),
+				ring == 2 and FORTRESS_THEME.Relic or FORTRESS_THEME.WeatheredStone,
+				parent
+			)
+			stone.Material = Enum.Material.Slate
+			stone.CanCollide = false
+		end
+	end
+
+	local tower = createPart("ObservatoryTower", Vector3.new(18, 38, 18), baseCFrame * CFrame.new(0, 19, -10), FORTRESS_THEME.DarkStone, parent)
+	tower.Material = Enum.Material.Slate
+	local dome = createPart("ObservatoryDome", Vector3.new(24, 16, 24), baseCFrame * CFrame.new(0, 43, -10), FORTRESS_THEME.Relic, parent)
+	dome.Shape = Enum.PartType.Ball
+	dome.Material = Enum.Material.Glass
+	dome.Transparency = 0.12
+
+	local telescope = createLog(baseCFrame * CFrame.new(0, 47, -3) * CFrame.Angles(math.rad(65), math.rad(12), math.rad(90)), 34, parent)
+	telescope.Name = "StarfallTelescope"
+	telescope.Color = FORTRESS_THEME.TrimStone
+	telescope.Material = Enum.Material.Metal
+
+	for index = 1, detailCount(14, 8) do
+		local shard = createPart(
+			"StarfallShard",
+			Vector3.new(1.5, decorRandom:NextNumber(7, 16), 1.5),
+			baseCFrame * CFrame.new(decorRandom:NextNumber(-58, 58), 4.5, decorRandom:NextNumber(-58, 58))
+				* CFrame.Angles(decorRandom:NextNumber(-0.2, 0.2), decorRandom:NextNumber(0, math.pi), decorRandom:NextNumber(-0.2, 0.2)),
+			FORTRESS_THEME.Relic,
+			parent
+		)
+		shard.Material = Enum.Material.Neon
+		shard.Transparency = 0.08
+		shard.CanCollide = false
+	end
+end
+
 local function createRegionLandmark(region, parent)
 	local model = Instance.new("Model")
 	model.Name = "Landmark_" .. region.Id
@@ -171,84 +1665,31 @@ local function createRegionLandmark(region, parent)
 	base.CanTouch = false
 	base.CanQuery = false
 
-	if region.Id == "PineRidge" then
-		local trunk = createPart(
-			"OldPine",
-			Vector3.new(32, 6, 6),
-			CFrame.new(center.X, 16, center.Z) * CFrame.Angles(0, 0, math.rad(90)),
-			Color3.fromRGB(72, 48, 31),
-			model
-		)
-		trunk.Shape = Enum.PartType.Cylinder
-		trunk.Material = Enum.Material.Wood
-
-		local crown = createPart("RidgeCrown", Vector3.new(24, 24, 24), CFrame.new(center.X, 34, center.Z), Color3.fromRGB(28, 97, 50), model)
-		crown.Shape = Enum.PartType.Ball
-		crown.Material = Enum.Material.Grass
-	elseif region.Id == "Stonebreak" then
-		for offset = -1, 1, 2 do
-			local pillar = createPart(
-				"CliffPillar",
-				Vector3.new(12, 24, 12),
-				CFrame.new(center.X + offset * 18, 12, center.Z),
-				Color3.fromRGB(87, 90, 88),
-				model
-			)
-			pillar.Shape = Enum.PartType.Ball
-			pillar.Material = Enum.Material.Slate
-		end
-
-		local cap = createPart("StoneArch", Vector3.new(44, 8, 10), CFrame.new(center.X, 29, center.Z), Color3.fromRGB(93, 96, 92), model)
-		cap.Material = Enum.Material.Slate
-	elseif region.Id == "Mirefen" then
-		local pool = createPart("WetlandPool", Vector3.new(42, 0.5, 34), CFrame.new(center.X, 0.18, center.Z), Color3.fromRGB(56, 135, 148), model)
-		pool.Material = Enum.Material.Glass
-		pool.Transparency = 0.2
-		pool.CanCollide = false
-
-		for index = 1, 10 do
-			local angle = (math.pi * 2) * (index / 10)
-			local reed = createPart(
-				"Reeds",
-				Vector3.new(0.5, 7, 0.5),
-				CFrame.new(center.X + math.cos(angle) * 24, 3.5, center.Z + math.sin(angle) * 18),
-				Color3.fromRGB(88, 128, 72),
-				model
-			)
-			reed.Material = Enum.Material.Grass
-		end
-	elseif region.Id == "OldCamp" then
-		local floor = createPart("RuinedFloor", Vector3.new(24, 0.6, 18), CFrame.new(center.X, 0.4, center.Z), Color3.fromRGB(103, 74, 51), model)
-		floor.Material = Enum.Material.WoodPlanks
-
-		for offset = -1, 1, 2 do
-			local wall = createPart(
-				"BrokenWall",
-				Vector3.new(1, 8, 18),
-				CFrame.new(center.X + offset * 12, 4.2, center.Z),
-				Color3.fromRGB(86, 58, 40),
-				model
-			)
-			wall.Material = Enum.Material.Wood
-		end
-	elseif region.Id == "IronHighlands" then
-		local spire = createPart("IronSpire", Vector3.new(14, 30, 14), CFrame.new(center.X, 15, center.Z), Color3.fromRGB(98, 82, 74), model)
-		spire.Shape = Enum.PartType.Ball
-		spire.Material = Enum.Material.Metal
-
-		local vein = createPart("IronGlow", Vector3.new(2, 22, 2), CFrame.new(center.X, 16, center.Z - 7), Color3.fromRGB(190, 111, 72), model)
-		vein.Material = Enum.Material.Neon
-		vein.CanCollide = false
+	if region.Id == "MarketCrossing" then
+		createMarketCrossing(center, model)
+	elseif region.Id == "FrostpineRise" then
+		createFrostpineRise(center, model)
+	elseif region.Id == "GlasswaterFen" then
+		createGlasswaterFen(center, model)
+	elseif region.Id == "RustjawQuarry" then
+		createRustjawQuarry(center, model)
+	elseif region.Id == "WreckersCove" then
+		createWreckersCove(center, model)
+	elseif region.Id == "MoonwillowGrove" then
+		createMoonwillowGrove(center, model)
+	elseif region.Id == "AshfallFoundry" then
+		createAshfallFoundry(center, model)
+	elseif region.Id == "StarfallObservatory" then
+		createStarfallObservatory(center, model)
 	else
-		local marker = createPart("MeadowMarker", Vector3.new(9, 4, 9), CFrame.new(center.X, 2, center.Z), Color3.fromRGB(222, 204, 133), model)
-		marker.Shape = Enum.PartType.Ball
+		local marker = createPart("MeadowMarker", Vector3.new(9, 4, 9), CFrame.new(center.X, 2, center.Z), FORTRESS_THEME.WeatheredStone, model)
 		marker.Material = Enum.Material.Slate
 	end
 
 	createRegionSign(region, model)
 end
 
-local function createTrail(fromPosition, toPosition, parent)
+local function createTrail(fromPosition, toPosition, parent, width)
 	local start = Vector3.new(fromPosition.X, 0.14, fromPosition.Z)
 	local finish = Vector3.new(toPosition.X, 0.14, toPosition.Z)
 	local offset = finish - start
@@ -258,18 +1699,106 @@ local function createTrail(fromPosition, toPosition, parent)
 		return
 	end
 
-	local segment = createPart(
-		"Trail",
-		Vector3.new(8, 0.14, length),
-		CFrame.new(start + offset * 0.5, finish),
-		Color3.fromRGB(106, 92, 66),
+	local segmentCount = math.max(1, math.ceil(length / 34))
+	local trailWidth = width or 8
+
+	for index = 1, segmentCount do
+		local alpha0 = (index - 1) / segmentCount
+		local alpha1 = index / segmentCount
+		local a = start + offset * alpha0
+		local b = start + offset * alpha1
+		local midpoint = (a + b) * 0.5
+		local segmentLength = (b - a).Magnitude
+		local terrainY = sampleTerrainHeight(midpoint.X, midpoint.Z) + 0.2
+		local segmentFinish = Vector3.new(b.X, terrainY, b.Z)
+		local segment = createPart(
+			"ForestTrail",
+			Vector3.new(trailWidth, 0.16, segmentLength + 1.2),
+			CFrame.new(Vector3.new(midpoint.X, terrainY, midpoint.Z), segmentFinish),
+			FORTRESS_THEME.Mud,
+			parent
+		)
+		segment.Material = Enum.Material.Ground
+		segment.Transparency = 0.08
+		segment.CanCollide = false
+		segment.CanTouch = false
+		segment.CanQuery = false
+	end
+end
+
+local function createRoadMarker(position, parent, name)
+	local terrainY = sampleTerrainHeight(position.X, position.Z)
+	local baseCFrame = CFrame.new(position.X, terrainY, position.Z)
+	local plinth = createPart(
+		name .. "RoadPlinth",
+		Vector3.new(5, 0.8, 5),
+		baseCFrame * CFrame.new(0, 0.4, 0),
+		FORTRESS_THEME.WeatheredStone,
 		parent
 	)
-	segment.Material = Enum.Material.Ground
-	segment.Transparency = 0.18
-	segment.CanCollide = false
-	segment.CanTouch = false
-	segment.CanQuery = false
+	plinth.Material = Enum.Material.Cobblestone
+	plinth.CanCollide = false
+
+	local marker = createPart(
+		name .. "Waystone",
+		Vector3.new(2.4, 7, 2.4),
+		baseCFrame * CFrame.new(0, 4.1, 0),
+		FORTRESS_THEME.TrimStone,
+		parent
+	)
+	marker.Material = Enum.Material.Slate
+	marker.CanCollide = false
+
+	local cap = createPart(
+		name .. "WaystoneCap",
+		Vector3.new(3.8, 1.2, 3.8),
+		baseCFrame * CFrame.new(0, 8.2, 0),
+		FORTRESS_THEME.DarkStone,
+		parent
+	)
+	cap.Material = Enum.Material.Slate
+	cap.CanCollide = false
+end
+
+local function getRegionsById()
+	local regionsById = {}
+
+	for _, region in ipairs(Config.Regions) do
+		regionsById[region.Id] = region
+	end
+
+	return regionsById
+end
+
+local function optimizeLandmarkPerformance(landmarks)
+	local pointLightCount = 0
+
+	for _, descendant in ipairs(landmarks:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			if descendant.Anchored then
+				descendant.CanTouch = false
+			end
+
+			if TONE_DOWN_SMOOTH_SURFACES and descendant.Material == Enum.Material.SmoothPlastic then
+				descendant.Material = Enum.Material.Plastic
+			end
+
+			descendant.Reflectance = math.min(descendant.Reflectance, TONE_DOWN_SMOOTH_SURFACES and 0.02 or 0.08)
+
+			if descendant.Size.Magnitude <= 4 then
+				descendant.CastShadow = false
+			end
+		elseif descendant:IsA("PointLight") then
+			pointLightCount += 1
+
+			if pointLightCount > MAX_LANDMARK_POINT_LIGHTS then
+				descendant.Enabled = false
+			else
+				descendant.Brightness = math.min(descendant.Brightness, 1.75)
+				descendant.Range = math.min(descendant.Range, 14)
+			end
+		end
+	end
 end
 
 local function setupLandmarks(worldFolder)
@@ -278,12 +1807,14 @@ local function setupLandmarks(worldFolder)
 			"BoundaryWater",
 			Vector3.new(Config.World.SpawnAreaHalfSize * 3.35, 1.2, Config.World.SpawnAreaHalfSize * 3.35),
 			CFrame.new(0, -2.35, 0),
-			Color3.fromRGB(58, 131, 156),
+			FORTRESS_THEME.Water,
 			worldFolder
 		)
 		water.CanCollide = false
 		water.Material = Enum.Material.Glass
 		water.Transparency = 0.18
+		water.CanQuery = true
+		water:SetAttribute("SurvivalSwimWater", true)
 	end
 
 	local landmarks = worldFolder:FindFirstChild("Landmarks")
@@ -293,25 +1824,51 @@ local function setupLandmarks(worldFolder)
 		landmarks.Parent = worldFolder
 	end
 
-	if landmarks:FindFirstChild("Landmark_BaseMeadow") then
+	if landmarks:GetAttribute("ThemeVersion") == LANDMARK_THEME_VERSION and landmarks:FindFirstChild("Landmark_MarketCrossing") then
+		optimizeLandmarkPerformance(landmarks)
 		return
 	end
 
+	for _, child in ipairs(landmarks:GetChildren()) do
+		child:Destroy()
+	end
+
+	landmarks:SetAttribute("ThemeVersion", LANDMARK_THEME_VERSION)
+
+	local regionsById = getRegionsById()
+
 	for _, region in ipairs(Config.Regions) do
 		createRegionLandmark(region, landmarks)
+	end
 
-		if region.Id ~= "BaseMeadow" then
-			createTrail(Vector3.new(0, 0, 0), region.Center, landmarks)
+	for _, route in ipairs(MAP_ROUTES) do
+		local fromRegion = regionsById[route[1]]
+		local toRegion = regionsById[route[2]]
+
+		if fromRegion and toRegion then
+			local width = route[1] == "MarketCrossing" and 11 or 7
+			local fromPosition = route[1] == "MarketCrossing" and getSpawnPoint() or fromRegion.Center
+			createTrail(fromPosition, toRegion.Center, landmarks, width)
 		end
 	end
 
-	for index = 1, 12 do
-		local angle = (math.pi * 2) * (index / 12)
+	createTrail(getSpawnPoint(), Vector3.new(0, 0, 16), landmarks, 12)
+	createRoadMarker(Vector3.new(0, 0, -112), landmarks, "NorthMarketGate")
+	createRoadMarker(Vector3.new(-132, 0, -24), landmarks, "WestTradeFork")
+	createRoadMarker(Vector3.new(132, 0, -20), landmarks, "EastTradeFork")
+	createRoadMarker(Vector3.new(-8, 0, 126), landmarks, "SouthTradeFork")
+	createRoadMarker(Vector3.new(-272, 0, -76), landmarks, "MoonwillowRoad")
+	createRoadMarker(Vector3.new(274, 0, 76), landmarks, "FoundryRoad")
+
+	local spawnPoint = getSpawnPoint()
+	local spawnRingCount = detailCount(12, 8)
+	for index = 1, spawnRingCount do
+		local angle = (math.pi * 2) * (index / spawnRingCount)
 		local radius = 13
 		local stone = createPart(
 			"SpawnRingStone",
 			Vector3.new(2.8, 1.1, 2.2),
-			CFrame.new(math.cos(angle) * radius, 0.35, math.sin(angle) * radius)
+			CFrame.new(spawnPoint.X + math.cos(angle) * radius, 0.35, spawnPoint.Z + math.sin(angle) * radius)
 				* CFrame.Angles(0, angle, decorRandom:NextNumber(-0.2, 0.2)),
 			Color3.fromRGB(112, 116, 105),
 			landmarks
@@ -321,9 +1878,13 @@ local function setupLandmarks(worldFolder)
 		stone.CanCollide = false
 	end
 
-	for index = 1, 24 do
-		local angle = (math.pi * 2) * (index / 24) + decorRandom:NextNumber(-0.08, 0.08)
+	local perimeterBoulderCount = detailCount(24, 12)
+	for index = 1, perimeterBoulderCount do
+		local angle = (math.pi * 2) * (index / perimeterBoulderCount) + decorRandom:NextNumber(-0.08, 0.08)
 		local radius = Config.World.SpawnAreaHalfSize * decorRandom:NextNumber(0.92, 1.08)
+		local x = math.cos(angle) * radius
+		local z = math.sin(angle) * radius
+		local y = sampleTerrainHeight(x, z)
 		local boulder = createPart(
 			"PerimeterBoulder",
 			Vector3.new(
@@ -331,7 +1892,7 @@ local function setupLandmarks(worldFolder)
 				decorRandom:NextNumber(2.5, 6),
 				decorRandom:NextNumber(5, 12)
 			),
-			CFrame.new(math.cos(angle) * radius, 0.8, math.sin(angle) * radius)
+			CFrame.new(x, y + 0.8, z)
 				* CFrame.Angles(0, decorRandom:NextNumber(0, math.pi), 0),
 			Color3.fromRGB(86, 93, 88),
 			landmarks
@@ -340,13 +1901,16 @@ local function setupLandmarks(worldFolder)
 		boulder.Material = Enum.Material.Slate
 	end
 
-	for index = 1, 8 do
+	for index = 1, detailCount(8, 4) do
 		local angle = decorRandom:NextNumber(0, math.pi * 2)
 		local radius = decorRandom:NextNumber(35, Config.World.SpawnAreaHalfSize * 0.8)
+		local x = math.cos(angle) * radius
+		local z = math.sin(angle) * radius
+		local y = sampleTerrainHeight(x, z)
 		local log = createPart(
 			"FallenLog",
 			Vector3.new(decorRandom:NextNumber(3, 4.5), decorRandom:NextNumber(12, 18), 3),
-			CFrame.new(math.cos(angle) * radius, 1.2, math.sin(angle) * radius)
+			CFrame.new(x, y + 1.2, z)
 				* CFrame.Angles(math.rad(90), decorRandom:NextNumber(0, math.pi), 0),
 			Color3.fromRGB(90, 61, 42),
 			landmarks
@@ -354,6 +1918,24 @@ local function setupLandmarks(worldFolder)
 		log.Shape = Enum.PartType.Cylinder
 		log.Material = Enum.Material.Wood
 	end
+
+	for index = 1, detailCount(54, 22) do
+		local angle = decorRandom:NextNumber(0, math.pi * 2)
+		local radius = decorRandom:NextNumber(18, Config.World.SpawnAreaHalfSize * 0.9)
+		local x = math.cos(angle) * radius
+		local z = math.sin(angle) * radius
+		createGrassClump(Vector3.new(x, sampleTerrainHeight(x, z), z), landmarks)
+	end
+
+	for index = 1, detailCount(30, 12) do
+		local angle = decorRandom:NextNumber(0, math.pi * 2)
+		local radius = decorRandom:NextNumber(24, Config.World.SpawnAreaHalfSize * 0.85)
+		local x = math.cos(angle) * radius
+		local z = math.sin(angle) * radius
+		createLeafLitter(Vector3.new(x, sampleTerrainHeight(x, z), z), landmarks)
+	end
+
+	optimizeLandmarkPerformance(landmarks)
 end
 
 local function setupBaseWorld()
@@ -371,28 +1953,46 @@ local function setupBaseWorld()
 		structuresFolder.Parent = worldFolder
 	end
 
+	if not structureIndexBound then
+		structureIndexBound = true
+		structuresFolder.ChildAdded:Connect(indexStructure)
+		structuresFolder.ChildRemoved:Connect(unindexStructure)
+	end
+	rebuildStructureIndex()
+
 	if not worldFolder:FindFirstChild("Ground") then
 		local ground = createPart(
 			"Ground",
 			Vector3.new(Config.World.SpawnAreaHalfSize * 2.35, 4, Config.World.SpawnAreaHalfSize * 2.35),
-			CFrame.new(0, -2, 0),
-			Color3.fromRGB(72, 104, 70),
+			CFrame.new(0, -20, 0),
+			FORTRESS_THEME.Grass,
 			worldFolder
 		)
 		ground.Material = Enum.Material.Grass
+		ground.Transparency = 1
+		ground.CanTouch = false
+		ground.CanQuery = false
 	end
 
+	setupTerrain(worldFolder)
 	setupLandmarks(worldFolder)
 
 	if not Workspace:FindFirstChild("SurvivalSpawn") then
+		local spawnPoint = getSpawnPoint()
+		local spawnY = sampleTerrainHeight(spawnPoint.X, spawnPoint.Z) + Config.World.RespawnHeight
 		local spawn = Instance.new("SpawnLocation")
 		spawn.Name = "SurvivalSpawn"
 		spawn.Anchored = true
-		spawn.Size = Vector3.new(10, 1, 10)
-		spawn.CFrame = CFrame.new(0, Config.World.RespawnHeight, 0)
-		spawn.Color = Color3.fromRGB(220, 210, 150)
-		spawn.Material = Enum.Material.WoodPlanks
+		spawn.Size = Vector3.new(12, 1, 12)
+		spawn.CFrame = CFrame.new(spawnPoint.X, spawnY, spawnPoint.Z)
+		spawn.Color = FORTRESS_THEME.WeatheredStone
+		spawn.Material = Enum.Material.Cobblestone
 		spawn.Parent = Workspace
+	else
+		local spawnPoint = getSpawnPoint()
+		local spawnY = sampleTerrainHeight(spawnPoint.X, spawnPoint.Z) + Config.World.RespawnHeight
+		local spawn = Workspace:FindFirstChild("SurvivalSpawn")
+		spawn.CFrame = CFrame.new(spawnPoint.X, spawnY, spawnPoint.Z)
 	end
 
 	setupLighting()
@@ -408,8 +2008,17 @@ local function findNearbyStructure(character, modelName, radius)
 		return false
 	end
 
-	for _, structure in ipairs(structuresFolder:GetChildren()) do
-		if structure.Name == modelName then
+	for _, structure in ipairs(getStructuresByName(modelName)) do
+		if modelName == "Campfire" and structure:GetAttribute("Lit") == false then
+			continue
+		end
+
+		if structure.PrimaryPart then
+			local distance = (structure.PrimaryPart.Position - root.Position).Magnitude
+			if distance <= radius then
+				return true
+			end
+		else
 			local pivot = structure:GetPivot()
 			if (pivot.Position - root.Position).Magnitude <= radius then
 				return true
@@ -424,25 +2033,50 @@ local function getWeatherConfig()
 	return Config.Weather[currentWeatherId] or Config.Weather.Clear
 end
 
-local function chooseWeather()
+local function chooseWeatherFromWeights(weights)
 	local totalWeight = 0
 
-	for _, weatherConfig in pairs(Config.Weather) do
-		totalWeight += weatherConfig.Weight or 1
+	for weatherId, weight in pairs(weights) do
+		if Config.Weather[weatherId] and weight > 0 then
+			totalWeight += weight
+		end
+	end
+
+	if totalWeight <= 0 then
+		return nil
 	end
 
 	local roll = random:NextNumber(0, totalWeight)
 	local running = 0
 
-	for weatherId, weatherConfig in pairs(Config.Weather) do
-		running += weatherConfig.Weight or 1
+	for weatherId, weight in pairs(weights) do
+		if Config.Weather[weatherId] and weight > 0 then
+			running += weight
 
-		if roll <= running then
-			return weatherId
+			if roll <= running then
+				return weatherId
+			end
 		end
 	end
 
-	return "Clear"
+	return nil
+end
+
+local function chooseWeather()
+	local sessionSeconds = os.clock() - sessionStartedAt
+	if sessionSeconds < EARLY_WEATHER_WINDOW_SECONDS then
+		local earlyWeatherId = chooseWeatherFromWeights(EARLY_WEATHER_WEIGHTS)
+		if earlyWeatherId then
+			return earlyWeatherId
+		end
+	end
+
+	local fullWeights = {}
+	for weatherId, weatherConfig in pairs(Config.Weather) do
+		fullWeights[weatherId] = weatherConfig.Weight or 1
+	end
+
+	return chooseWeatherFromWeights(fullWeights) or "Clear"
 end
 
 local function getClockLabel()
@@ -456,6 +2090,7 @@ function WorldService.getWorldState(player)
 	local weather = getWeatherConfig()
 	local threat = nil
 	local region = player and getPlayerRegion(player) or nil
+	local discoveredRegions = player and cloneMap(visitedRegionsByPlayer[player]) or {}
 
 	if context and context.EnemyService and context.EnemyService.getThreat then
 		threat = context.EnemyService.getThreat()
@@ -469,6 +2104,8 @@ function WorldService.getWorldState(player)
 		Weather = weather.DisplayName,
 		Threat = threat,
 		Region = region and region.DisplayName or "Wilderness",
+		RegionId = region and region.Id or nil,
+		DiscoveredRegions = discoveredRegions,
 	}
 end
 
@@ -514,6 +2151,16 @@ function WorldService.getAmbientTemperature(player)
 	return baseTemperature
 end
 
+function WorldService.isProtectedFromWeather(player)
+	local shelterConfig = Config.Buildables.ShelterKit
+	local watchtowerConfig = Config.Buildables.WatchtowerKit
+	local campfireConfig = Config.Buildables.CampfireKit
+
+	return findNearbyStructure(player.Character, "Shelter", shelterConfig.Radius)
+		or findNearbyStructure(player.Character, "Watchtower", watchtowerConfig.ShelterRadius or watchtowerConfig.Radius)
+		or findNearbyStructure(player.Character, "Campfire", campfireConfig.Radius)
+end
+
 function WorldService.isNearStructure(player, modelName, radius)
 	return findNearbyStructure(player.Character, modelName, radius)
 end
@@ -522,12 +2169,36 @@ function WorldService.getStructuresFolder()
 	return structuresFolder
 end
 
+function WorldService.getStructuresByName(modelName)
+	if type(modelName) ~= "string" then
+		return {}
+	end
+
+	return getStructuresByName(modelName)
+end
+
 function WorldService.getRegionForPosition(position)
 	return getRegionForPosition(position)
 end
 
 function WorldService.getRegions()
 	return Config.Regions
+end
+
+function WorldService.getTerrainHeightAt(x, z)
+	return sampleTerrainHeight(x, z)
+end
+
+function WorldService.getSnapshot(player)
+	return {
+		DiscoveredRegions = cloneMap(visitedRegionsByPlayer[player]),
+	}
+end
+
+function WorldService.applySnapshot(player, snapshot)
+	snapshot = type(snapshot) == "table" and snapshot or {}
+	visitedRegionsByPlayer[player] = cloneMap(snapshot.DiscoveredRegions)
+	WorldService.sendWorldState(player)
 end
 
 function WorldService.init(newContext)
@@ -571,6 +2242,14 @@ function WorldService.init(newContext)
 	task.spawn(function()
 		while true do
 			for _, player in ipairs(Players:GetPlayers()) do
+				local shouldSendWorldState = false
+				local currentRegion = getPlayerRegion(player)
+				local currentRegionId = currentRegion and currentRegion.Id or nil
+				if lastRegionIdByPlayer[player] ~= currentRegionId then
+					lastRegionIdByPlayer[player] = currentRegionId
+					shouldSendWorldState = true
+				end
+
 				local region = getDiscoverableRegion(player)
 
 				if region then
@@ -591,10 +2270,15 @@ function WorldService.init(newContext)
 						if context.ProgressionService then
 							context.ProgressionService.addXP(player, Config.Progression.XP.RegionDiscovered, "region discovered")
 						end
+
+						markPlayerDirty(player)
+						shouldSendWorldState = true
 					end
 				end
 
-				WorldService.sendWorldState(player)
+				if shouldSendWorldState then
+					WorldService.sendWorldState(player)
+				end
 			end
 
 			task.wait(2)
@@ -614,11 +2298,14 @@ function WorldService.init(newContext)
 end
 
 function WorldService.playerAdded(player)
+	local region = getPlayerRegion(player)
+	lastRegionIdByPlayer[player] = region and region.Id or nil
 	WorldService.sendWorldState(player)
 end
 
 function WorldService.playerRemoving(player)
 	visitedRegionsByPlayer[player] = nil
+	lastRegionIdByPlayer[player] = nil
 end
 
 return WorldService

@@ -8,8 +8,18 @@ local ObjectiveService = {}
 local progressByPlayer = {}
 local context
 
+local function markDirty(player)
+	if context and context.PersistenceService then
+		context.PersistenceService.markPlayerDirty(player)
+	end
+end
+
 local function cloneMap(source)
 	local copy = {}
+
+	if type(source) ~= "table" then
+		return copy
+	end
 
 	for key, value in pairs(source) do
 		if type(value) == "table" then
@@ -131,6 +141,7 @@ local function evaluate(player)
 	end
 
 	ObjectiveService.send(player)
+	markDirty(player)
 end
 
 function ObjectiveService.getSnapshot(player)
@@ -142,6 +153,7 @@ function ObjectiveService.getSnapshot(player)
 			Id = objectiveId,
 			DisplayName = objective.DisplayName,
 			Description = objective.Description,
+			Kind = objective.Kind,
 			Progress = getProgressText(progress, objective),
 			Completed = progress.Completed[objectiveId] == true,
 		})
@@ -157,12 +169,41 @@ function ObjectiveService.getSnapshot(player)
 
 	return {
 		Objectives = objectives,
+		Collected = cloneMap(progress.Collected),
+		Crafted = cloneMap(progress.Crafted),
+		Built = cloneMap(progress.Built),
 		Counters = cloneMap(progress.Counters),
+		Completed = cloneMap(progress.Completed),
 	}
 end
 
 function ObjectiveService.send(player)
 	Remotes.get("ObjectiveUpdated"):FireClient(player, ObjectiveService.getSnapshot(player))
+end
+
+function ObjectiveService.applySnapshot(player, snapshot)
+	snapshot = type(snapshot) == "table" and snapshot or {}
+
+	local progress = ensureProgress(player)
+
+	progress.Collected = cloneMap(snapshot.Collected)
+	progress.Crafted = cloneMap(snapshot.Crafted)
+	progress.Built = cloneMap(snapshot.Built)
+	progress.Counters = cloneMap(snapshot.Counters)
+	progress.Completed = cloneMap(snapshot.Completed)
+
+	for counterId, defaultValue in pairs({
+		BeaconStage = 0,
+		CachesSearched = 0,
+		EnemiesDefeated = 0,
+		NightsSurvived = 0,
+		RegionsDiscovered = 0,
+		ShelterRests = 0,
+	}) do
+		progress.Counters[counterId] = math.max(0, math.floor(tonumber(progress.Counters[counterId]) or defaultValue))
+	end
+
+	ObjectiveService.send(player)
 end
 
 function ObjectiveService.recordCollected(player, itemId, amount)

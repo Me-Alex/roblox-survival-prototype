@@ -156,18 +156,31 @@ local function getOwnerPlayer(model)
 	return Players:GetPlayerByUserId(ownerUserId)
 end
 
-local function getHighestBeaconStage()
-	local structuresFolder = context and context.WorldService and context.WorldService.getStructuresFolder()
-	local highestStage = 0
+local function getStructuresByName(modelName)
+	if context and context.WorldService and context.WorldService.getStructuresByName then
+		return context.WorldService.getStructuresByName(modelName)
+	end
 
+	local structuresFolder = context and context.WorldService and context.WorldService.getStructuresFolder()
+	local matches = {}
 	if not structuresFolder then
-		return highestStage
+		return matches
 	end
 
 	for _, structure in ipairs(structuresFolder:GetChildren()) do
-		if structure.Name == "SignalBeacon" then
-			highestStage = math.max(highestStage, structure:GetAttribute("Stage") or 0)
+		if structure.Name == modelName then
+			table.insert(matches, structure)
 		end
+	end
+
+	return matches
+end
+
+local function getHighestBeaconStage()
+	local highestStage = 0
+
+	for _, structure in ipairs(getStructuresByName("SignalBeacon")) do
+		highestStage = math.max(highestStage, structure:GetAttribute("Stage") or 0)
 	end
 
 	return highestStage
@@ -190,41 +203,42 @@ local function getDamageForPlayer(player, baseDamage)
 end
 
 local function triggerSpikeTraps(enemy, position)
-	local structuresFolder = context and context.WorldService and context.WorldService.getStructuresFolder()
-	if not structuresFolder then
-		return
-	end
+	for _, structure in ipairs(getStructuresByName("SpikeTrap")) do
+		if not structure.PrimaryPart then
+			continue
+		end
 
-	for _, structure in ipairs(structuresFolder:GetChildren()) do
-		if structure.Name == "SpikeTrap" and structure.PrimaryPart then
-			local charges = structure:GetAttribute("Charges") or 0
-			local lastTriggered = structure:GetAttribute("LastTriggered") or 0
-			local distance = (structure:GetPivot().Position - position).Magnitude
+		local charges = structure:GetAttribute("Charges") or 0
+		local lastTriggered = structure:GetAttribute("LastTriggered") or 0
+		local distance = (structure:GetPivot().Position - position).Magnitude
 
-			if charges > 0
-				and os.clock() - lastTriggered >= 1
-				and distance <= Config.Buildables.SpikeTrapKit.Radius
-			then
-				structure:SetAttribute("LastTriggered", os.clock())
-				structure:SetAttribute("Charges", charges - 1)
+		if charges > 0
+			and os.clock() - lastTriggered >= 1
+			and distance <= Config.Buildables.SpikeTrapKit.Radius
+		then
+			structure:SetAttribute("LastTriggered", os.clock())
+			structure:SetAttribute("Charges", charges - 1)
 
-				local owner = getOwnerPlayer(structure)
-				EnemyService.damageEnemy(owner, enemy, Config.Buildables.SpikeTrapKit.Damage)
-
-				if owner then
-					if context.ProgressionService then
-						context.ProgressionService.addXP(owner, Config.Progression.XP.TrapTriggered, "trap triggered")
-					end
-
-					Remotes.get("Notification"):FireClient(owner, "Spike trap triggered.")
-				end
-
-				if charges - 1 <= 0 then
-					structure:Destroy()
-				end
-
-				return
+			if context.PersistenceService then
+				context.PersistenceService.markWorldDirty()
 			end
+
+			local owner = getOwnerPlayer(structure)
+			EnemyService.damageEnemy(owner, enemy, Config.Buildables.SpikeTrapKit.Damage)
+
+			if owner then
+				if context.ProgressionService then
+					context.ProgressionService.addXP(owner, Config.Progression.XP.TrapTriggered, "trap triggered")
+				end
+
+				Remotes.get("Notification"):FireClient(owner, "Spike trap triggered.")
+			end
+
+			if charges - 1 <= 0 then
+				structure:Destroy()
+			end
+
+			return
 		end
 	end
 end

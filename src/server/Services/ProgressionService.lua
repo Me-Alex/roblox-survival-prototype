@@ -6,6 +6,13 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local ProgressionService = {}
 
 local progressionByPlayer = {}
+local context
+
+local function markDirty(player)
+	if context and context.PersistenceService then
+		context.PersistenceService.markPlayerDirty(player)
+	end
+end
 
 local function getLevelForXP(xp)
 	local level = 1
@@ -52,6 +59,15 @@ function ProgressionService.send(player)
 	Remotes.get("ProgressionUpdated"):FireClient(player, ProgressionService.getSnapshot(player))
 end
 
+function ProgressionService.applySnapshot(player, snapshot)
+	snapshot = type(snapshot) == "table" and snapshot or {}
+
+	local progression = ensureProgression(player)
+	progression.XP = math.max(0, math.floor(tonumber(snapshot.XP) or 0))
+	progression.Level = getLevelForXP(progression.XP)
+	ProgressionService.send(player)
+end
+
 function ProgressionService.addXP(player, amount, reason)
 	if not amount or amount <= 0 then
 		return
@@ -71,6 +87,11 @@ function ProgressionService.addXP(player, amount, reason)
 	end
 
 	ProgressionService.send(player)
+	markDirty(player)
+end
+
+function ProgressionService.init(newContext)
+	context = newContext
 end
 
 function ProgressionService.playerAdded(player)

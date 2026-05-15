@@ -10,8 +10,18 @@ local equippedByPlayer = {}
 local durabilityByPlayer = {}
 local context
 
+local function markDirty(player)
+	if context and context.PersistenceService then
+		context.PersistenceService.markPlayerDirty(player)
+	end
+end
+
 local function cloneMap(items)
 	local copy = {}
+
+	if type(items) ~= "table" then
+		return copy
+	end
 
 	for itemId, count in pairs(items) do
 		copy[itemId] = count
@@ -84,6 +94,55 @@ function InventoryService.getInventory(player)
 	}
 end
 
+function InventoryService.getSnapshot(player)
+	return InventoryService.getInventory(player)
+end
+
+function InventoryService.applySnapshot(player, snapshot)
+	snapshot = type(snapshot) == "table" and snapshot or {}
+
+	local items = getOrCreate(player)
+	local equipped = getEquipped(player)
+	local durability = getDurability(player)
+	local snapshotItems = type(snapshot.Items) == "table" and snapshot.Items or {}
+	local snapshotEquipped = type(snapshot.Equipped) == "table" and snapshot.Equipped or {}
+	local snapshotDurability = type(snapshot.Durability) == "table" and snapshot.Durability or {}
+
+	for itemId in pairs(Config.Items) do
+		items[itemId] = math.max(0, math.floor(tonumber(snapshotItems[itemId]) or 0))
+	end
+
+	for slot in pairs(equipped) do
+		equipped[slot] = nil
+	end
+
+	for slot, itemId in pairs(snapshotEquipped) do
+		if Config.Equipment[itemId] and Config.Equipment[itemId].Slot == slot and (items[itemId] or 0) > 0 then
+			equipped[slot] = itemId
+		end
+	end
+
+	for itemId in pairs(durability) do
+		durability[itemId] = nil
+	end
+
+	for itemId, value in pairs(snapshotDurability) do
+		local equipmentConfig = Config.Equipment[itemId]
+		if equipmentConfig and (items[itemId] or 0) > 0 then
+			durability[itemId] = math.clamp(tonumber(value) or equipmentConfig.MaxDurability, 1, equipmentConfig.MaxDurability)
+		end
+	end
+
+	for itemId, count in pairs(items) do
+		if count > 0 then
+			ensureDurability(player, itemId)
+		end
+	end
+
+	clearInvalidEquipment(player)
+	InventoryService.send(player)
+end
+
 function InventoryService.send(player)
 	Remotes.get("InventoryUpdated"):FireClient(player, InventoryService.getInventory(player))
 
@@ -108,6 +167,8 @@ function InventoryService.addItem(player, itemId, amount)
 	if amount > 0 and context and context.ObjectiveService then
 		context.ObjectiveService.recordCollected(player, itemId, amount)
 	end
+
+	markDirty(player)
 end
 
 function InventoryService.hasItem(player, itemId, amount)
@@ -141,6 +202,7 @@ function InventoryService.removeItems(player, cost)
 
 	clearInvalidEquipment(player)
 	InventoryService.send(player)
+	markDirty(player)
 	return true
 end
 
@@ -161,6 +223,12 @@ function InventoryService.equipItem(player, itemId)
 	ensureDurability(player, itemId)
 	getEquipped(player)[equipmentConfig.Slot] = itemId
 	InventoryService.send(player)
+
+	if context and context.ItemToolService and context.ItemToolService.equipPlayerTool then
+		context.ItemToolService.equipPlayerTool(player, itemId)
+	end
+
+	markDirty(player)
 
 	return true, string.format("Equipped %s.", Config.Items[itemId].DisplayName)
 end
@@ -203,6 +271,8 @@ function InventoryService.damageEquipment(player, itemId, amount)
 	else
 		InventoryService.send(player)
 	end
+
+	markDirty(player)
 end
 
 function InventoryService.damageEquippedArmor(player, amount)

@@ -10,6 +10,30 @@ local vitalsByPlayer = {}
 local context
 local random = Random.new(Config.World.Seed + 211)
 
+local function markDirty(player)
+	if context and context.PersistenceService then
+		context.PersistenceService.markPlayerDirty(player)
+	end
+end
+
+local function cloneMap(source)
+	local copy = {}
+
+	if type(source) ~= "table" then
+		return copy
+	end
+
+	for key, value in pairs(source) do
+		if type(value) == "table" then
+			copy[key] = cloneMap(value)
+		else
+			copy[key] = value
+		end
+	end
+
+	return copy
+end
+
 local function clampVital(value)
 	return math.clamp(value, 0, Config.Vitals.Max)
 end
@@ -23,15 +47,21 @@ local function getHumanoid(player)
 	return character:FindFirstChildOfClass("Humanoid")
 end
 
+local function getHealthPercent(player)
+	local humanoid = getHumanoid(player)
+	if humanoid and humanoid.MaxHealth > 0 then
+		return (humanoid.Health / humanoid.MaxHealth) * 100
+	end
+
+	local vitals = vitalsByPlayer[player]
+	return vitals and (vitals.Health or 100) or 100
+end
+
 local function sendVitals(player)
 	local vitals = vitalsByPlayer[player]
 	if vitals then
-		local humanoid = getHumanoid(player)
-		local healthPercent = 100
-
-		if humanoid and humanoid.MaxHealth > 0 then
-			healthPercent = (humanoid.Health / humanoid.MaxHealth) * 100
-		end
+		local healthPercent = getHealthPercent(player)
+		vitals.Health = healthPercent
 
 		Remotes.get("VitalsUpdated"):FireClient(player, {
 			Hunger = math.floor(vitals.Hunger + 0.5),
@@ -49,6 +79,7 @@ local function ensureVitals(player)
 			Hunger = Config.Vitals.Max,
 			Thirst = Config.Vitals.Max,
 			Temperature = 72,
+			Health = 100,
 			Statuses = {},
 		}
 	end
@@ -70,6 +101,14 @@ function VitalsService.applyStatus(player, statusId, durationSeconds)
 	end
 
 	local vitals = ensureVitals(player)
+	local existing = vitals.Statuses[statusId]
+
+	if existing then
+		existing.Remaining = math.max(existing.Remaining or 0, durationSeconds or statusConfig.DurationSeconds)
+		sendVitals(player)
+		return
+	end
+
 	vitals.Statuses[statusId] = {
 		DisplayName = statusConfig.DisplayName,
 		Remaining = durationSeconds or statusConfig.DurationSeconds,
@@ -77,12 +116,14 @@ function VitalsService.applyStatus(player, statusId, durationSeconds)
 
 	Remotes.get("Notification"):FireClient(player, string.format("Status: %s", statusConfig.DisplayName))
 	sendVitals(player)
+	markDirty(player)
 end
 
 function VitalsService.removeStatus(player, statusId)
 	local vitals = ensureVitals(player)
 	vitals.Statuses[statusId] = nil
 	sendVitals(player)
+	markDirty(player)
 end
 
 function VitalsService.applyConsumable(player, consumable)
@@ -122,12 +163,51 @@ function VitalsService.applyConsumable(player, consumable)
 		end
 	end
 
+	if consumable.ApplyStatuses then
+		for statusId, durationSeconds in pairs(consumable.ApplyStatuses) do
+			VitalsService.applyStatus(player, statusId, durationSeconds)
+		end
+	end
+
 	if consumable.StatusChance then
 		for statusId, chance in pairs(consumable.StatusChance) do
 			if random:NextNumber() <= chance then
 				VitalsService.applyStatus(player, statusId)
 			end
 		end
+	end
+
+	sendVitals(player)
+	markDirty(player)
+end
+
+function VitalsService.getSnapshot(player)
+	local vitals = ensureVitals(player)
+	vitals.Health = getHealthPercent(player)
+
+	return {
+		Hunger = vitals.Hunger,
+		Thirst = vitals.Thirst,
+		Temperature = vitals.Temperature,
+		Health = vitals.Health,
+		Statuses = cloneMap(vitals.Statuses),
+	}
+end
+
+function VitalsService.applySnapshot(player, snapshot)
+	snapshot = type(snapshot) == "table" and snapshot or {}
+
+	local vitals = ensureVitals(player)
+	vitals.Hunger = clampVital(tonumber(snapshot.Hunger) or vitals.Hunger or Config.Vitals.Max)
+	vitals.Thirst = clampVital(tonumber(snapshot.Thirst) or vitals.Thirst or Config.Vitals.Max)
+	vitals.Temperature = math.clamp(tonumber(snapshot.Temperature) or vitals.Temperature or 72, 0, 120)
+	vitals.Health = math.clamp(tonumber(snapshot.Health) or vitals.Health or 100, 1, 100)
+	vitals.Statuses = cloneMap(snapshot.Statuses)
+	vitals.LoadedSnapshot = true
+
+	local humanoid = getHumanoid(player)
+	if humanoid then
+		humanoid.Health = math.clamp(humanoid.MaxHealth * (vitals.Health / 100), 1, humanoid.MaxHealth)
 	end
 
 	sendVitals(player)
@@ -143,12 +223,31 @@ local function updateStatuses(player, vitals)
 				damage(player, statusConfig.DamagePerTick)
 			end
 
+			if statusConfig.HealthPerTick then
+				local humanoid = getHumanoid(player)
+				if humanoid then
+					humanoid.Health = math.min(humanoid.MaxHealth, humanoid.Health + statusConfig.HealthPerTick)
+				end
+			end
+
 			if statusConfig.HungerLossPerTick then
 				vitals.Hunger = clampVital(vitals.Hunger - statusConfig.HungerLossPerTick)
 			end
 
 			if statusConfig.ThirstLossPerTick then
 				vitals.Thirst = clampVital(vitals.Thirst - statusConfig.ThirstLossPerTick)
+			end
+
+			if statusConfig.ThirstGainPerTick then
+				vitals.Thirst = clampVital(vitals.Thirst + statusConfig.ThirstGainPerTick)
+			end
+
+			if statusConfig.TemperatureLossPerTick then
+				vitals.Temperature = math.clamp(vitals.Temperature - statusConfig.TemperatureLossPerTick, 0, 120)
+			end
+
+			if statusConfig.TemperatureGainPerTick then
+				vitals.Temperature = math.clamp(vitals.Temperature + statusConfig.TemperatureGainPerTick, 0, 120)
 			end
 
 			if statusState.Remaining <= 0 then
@@ -167,11 +266,20 @@ local function updatePlayer(player)
 	local weather = world and world.getCurrentWeatherConfig() or nil
 	local hungerMultiplier = weather and weather.HungerMultiplier or 1
 	local thirstMultiplier = weather and weather.ThirstMultiplier or 1
+	local protectedFromWeather = world and world.isProtectedFromWeather and world.isProtectedFromWeather(player)
 
 	vitals.Hunger = clampVital(vitals.Hunger - (Config.Vitals.HungerLoss * hungerMultiplier))
 	vitals.Thirst = clampVital(vitals.Thirst - (Config.Vitals.ThirstLoss * thirstMultiplier))
 	vitals.Temperature += (targetTemperature - vitals.Temperature) * Config.Vitals.TemperatureDrift
 	vitals.Temperature = math.clamp(vitals.Temperature, 0, 120)
+
+	if weather and weather.ExposureStatus then
+		if protectedFromWeather then
+			vitals.Statuses[weather.ExposureStatus] = nil
+		elseif random:NextNumber() <= (weather.ExposureChance or 0) then
+			VitalsService.applyStatus(player, weather.ExposureStatus)
+		end
+	end
 
 	if vitals.Hunger <= 0 then
 		damage(player, Config.Vitals.StarvingDamage)
@@ -188,6 +296,7 @@ local function updatePlayer(player)
 	end
 
 	updateStatuses(player, vitals)
+	vitals.Health = getHealthPercent(player)
 
 	sendVitals(player)
 end
@@ -211,11 +320,22 @@ function VitalsService.playerAdded(player)
 	sendVitals(player)
 
 	player.CharacterAdded:Connect(function()
-		local vitals = ensureVitals(player)
-		vitals.Hunger = math.max(vitals.Hunger, 35)
-		vitals.Thirst = math.max(vitals.Thirst, 35)
-		vitals.Temperature = 72
-		sendVitals(player)
+		task.defer(function()
+			local vitals = ensureVitals(player)
+			local humanoid = getHumanoid(player)
+
+			if vitals.LoadedSnapshot then
+				if humanoid then
+					humanoid.Health = math.clamp(humanoid.MaxHealth * ((vitals.Health or 100) / 100), 1, humanoid.MaxHealth)
+				end
+			else
+				vitals.Hunger = math.max(vitals.Hunger, 35)
+				vitals.Thirst = math.max(vitals.Thirst, 35)
+				vitals.Temperature = 72
+			end
+
+			sendVitals(player)
+		end)
 	end)
 end
 

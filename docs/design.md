@@ -2,7 +2,7 @@
 
 ## Fantasy
 
-The player wakes up in a small wilderness area and has to survive the first night by gathering basic materials, crafting simple gear, managing hunger and thirst, and building warmth or shelter.
+The player wakes up at Hearthmarket Crossing, a rough survival trade hub in the center of a dangerous island, then has to survive the first night by gathering basic materials, bartering for useful supplies, crafting simple gear, managing hunger and thirst, and building warmth or shelter.
 
 ## Core Loop
 
@@ -23,6 +23,8 @@ The player wakes up in a small wilderness area and has to survive the first nigh
 - Eat
 - Heal
 - Build
+- Store resources
+- Open doors
 - Attack
 - Hunt
 - Equip
@@ -31,15 +33,17 @@ The player wakes up in a small wilderness area and has to survive the first nigh
 - Find water
 - Build crafting stations
 - Smelt ore
+- Trade at shops
 - Survive nightfall
 
 ## Current Prototype Systems
 
-- `WorldService`: regional map, spawn, landmarks, lighting, day/night, discovery tracking, and structure proximity checks.
-- `ResourceService`: biome-weighted resource spawning and prompt-driven harvesting.
+- `WorldService`: regional map, Hearthmarket Crossing hub, spawn, landmarks, cinematic lighting, ambient clutter, day/night, discovery tracking, and structure proximity checks.
+- `ResourceService`: biome-weighted resource spawning, more natural primitive resource models, and prompt-driven harvesting.
 - `InventoryService`: server inventory state, item usage, and remote sync.
-- `ItemToolService`: mirrors server inventory into tangible Roblox Backpack tools and routes tool actions back through server validation.
-- `CraftingService`: recipe validation, crafting, and structure placement.
+- `ItemToolService`: mirrors weapons, armor, and build kits into tangible Roblox Backpack tools, builds detailed primitive weapon silhouettes, and routes tool actions back through server validation.
+- `CraftingService`: recipe validation, crafting, structure placement, door toggles, and storage chest transfer prompts.
+- `ShopService`: barter stand spawning, prompts, and server-validated shop purchases.
 - `VitalsService`: hunger, thirst, temperature, and survival damage.
 - `ProgressionService`: XP, levels, and level-up notifications.
 - `EnemyService`: night stalker spawning, pursuit, attacks, damage scaling, drops, and cleanup.
@@ -50,32 +54,41 @@ The player wakes up in a small wilderness area and has to survive the first nigh
 ## Added Gameplay Depth
 
 - Weather changes every few minutes and affects temperature, hunger drain, thirst drain, and enemy pressure.
-- The island is divided into named regions with visible landmarks and route trails.
-- Resources are clustered by region, so travel planning matters: forests favor wood, wetlands favor herbs and water, cliffs and highlands favor stone and ore, and the old camp favors caches.
+- Rain and storms can apply `Soaked` to exposed players, adding a short cold-pressure status unless they reach a shelter, watchtower, or lit campfire.
+- The island is divided into named regions with visible landmarks, connected muddy trails, waystones, and a matching schematic map in the HUD, now spread over a larger playable footprint.
+- Resources are clustered by region, so travel planning matters: Frostpine Rise and Moonwillow Grove favor wood and forage, Glasswater Fen favors herbs and water, Rustjaw Quarry and Ashfall Foundry favor stone and ore, Wreckers' Cove favors caches, and Starfall Observatory favors relic salvage.
+- Shop stands give each route a destination: traders, builders, provisioners, herbalists, smiths, and relic brokers turn gathered resources into specific survival plans.
 - Region discovery grants XP and feeds an exploration objective.
 - Water springs and rain collectors make thirst management more active than eating berries.
 - Sprinting helps exploration and combat escapes, but stamina creates a short-term movement tradeoff.
-- Shelters now provide an active rest interaction that restores health and warmth, costs a little hunger and thirst, and has a cooldown.
+- Shelters now provide an active rest interaction that restores health and warmth, costs a little hunger and thirst, grants a short `Rested` recovery status, and has a cooldown.
 - Night stalkers create a reason to prepare before dark with weapons, armor, fire, and food.
 - Threat builds through dangerous nights and signal beacon upgrades, then turns into raids.
 - Defeated enemies drop raw meat and hide, feeding the cooking and armor loops.
 - Gear must be equipped to count in combat, and equipment durability creates long-run resource pressure.
-- Inventory items are represented by real Tool objects, so players can hold resources, activate consumables, equip weapons and armor, and place build kits from the Roblox Backpack.
+- Weapons, armor, and build kits are represented by real Tool objects, while raw materials stay in the inventory menu so gathered resources do not clutter the Roblox hotbar; usable food and medicine can still appear in the custom action bar.
+- Trees can award secondary leaves, and the client shows stacked resource gain cards like the gathering mockup.
+- Base building now includes wooden walls, openable doors, stairs, storage chests, and craftable watchtowers.
+- Storage chests hold resource stacks using a single prompt: if the player has resources, it stores a stack; otherwise it withdraws stored resources.
+- Campfires now have fuel, visible flame intensity, a refuel prompt, and faster burn during storms, turning warmth into an ongoing resource decision instead of a one-time placement.
 - Bleeding and poison make medical crafting matter beyond simple health restoration.
 - Workbench and forge structures create a midgame station loop.
+- Mushroom clusters add a low-risk food find in damp and forested regions, while torch stands give players a permanent way to mark roads, camp entrances, and defensive areas.
 - Iron ore and ingots introduce a second gear tier with level requirements.
 - Herb patches and abandoned caches make scouting more valuable between base-building pushes.
 - Spike traps give base placement a defensive purpose.
 - The signal beacon creates a longer rescue objective with staged costs and escalating danger.
 - Objectives teach the survival loop and reward useful items without requiring a separate tutorial screen.
-- The HUD keeps only a compact vitals/world summary and right-side action rail visible; inventory, crafting, objectives, and world details live in the menu.
-- Weapon tools animate their grip on activation, giving axe swings and spear thrusts feedback without requiring external animation assets.
+- The HUD follows the survival reference style: bottom-left vitals bars, top-center day/objective text, a right-side survivor day board, a larger player-centered circular minimap, teammate name/health plates, and a bottom action bar; inventory, guided crafting categories, objectives, and the world map live in the menu.
+- Weapon tools animate the player torso, arms, wrists, and grip with smoothed procedural keyframes, giving axe swings, spear thrusts, mining strikes, and resource gathering feedback without requiring external animation assets.
+- Harvest prompts now tell the client to play a local chop, mine, gather, search, or drink gesture while the server plays shared world impact effects.
+- Trees, rocks, fiber plants, berry bushes, springs, iron deposits, and the surrounding terrain now use layered primitive details so they read less like single placeholder blocks.
 
 ## Next Production Steps
 
 - Add DataStore-backed saves for inventory, unlocked recipes, and survival days.
 - Replace runtime primitive models with polished Roblox assets.
-- Add hostile weather, storms, and biome-specific temperature rules.
+- Add biome-specific temperature rules and stronger storm events after the first weather balance pass.
 - Add wildlife, ranged weapons, and enemy patrol zones after the first combat playtest.
 - Add dedicated cooking stations and spoilage timers.
 - Add anti-exploit validation for placement distance, harvest cooldowns, and impossible inventory changes.

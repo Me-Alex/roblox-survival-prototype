@@ -7,6 +7,8 @@ local CombatService = {}
 
 local context
 local lastAttackByPlayer = {}
+local lastUnarmedHintByPlayer = {}
+local UNEQUIPPED_HINT_COOLDOWN_SECONDS = 4
 
 local function getRoot(player)
 	local character = player.Character
@@ -23,16 +25,20 @@ local function getBestWeapon(player)
 		return equippedWeapon, Config.Combat.Weapons[equippedWeapon]
 	end
 
-	for _, weaponId in ipairs({ "IronSpear", "Spear", "StoneAxe" }) do
-		if context.InventoryService.hasItem(player, weaponId, 1) then
-			return weaponId, Config.Combat.Weapons[weaponId]
-		end
-	end
-
 	return "Fists", {
 		Damage = Config.Combat.DefaultDamage,
 		Range = Config.Combat.DefaultRange,
 	}
+end
+
+local function hasStowedWeapon(player)
+	for _, weaponId in ipairs({ "IronSpear", "Spear", "Pickaxe", "StoneAxe" }) do
+		if context.InventoryService.hasItem(player, weaponId, 1) then
+			return true
+		end
+	end
+
+	return false
 end
 
 local function getClosestEnemy(root, range)
@@ -73,6 +79,14 @@ function CombatService.attack(player)
 	end
 
 	local weaponName, weaponConfig = getBestWeapon(player)
+	if weaponName == "Fists" and hasStowedWeapon(player) then
+		local lastHintAt = lastUnarmedHintByPlayer[player] or 0
+		if now - lastHintAt >= UNEQUIPPED_HINT_COOLDOWN_SECONDS then
+			lastUnarmedHintByPlayer[player] = now
+			Remotes.get("Notification"):FireClient(player, "Equip a weapon to use its full damage.")
+		end
+	end
+
 	local enemy = getClosestEnemy(root, weaponConfig.Range)
 
 	if not enemy then
@@ -107,6 +121,7 @@ end
 
 function CombatService.playerRemoving(player)
 	lastAttackByPlayer[player] = nil
+	lastUnarmedHintByPlayer[player] = nil
 end
 
 return CombatService
