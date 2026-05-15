@@ -114,6 +114,35 @@ local function isInsideIsland(x, z, padding)
     return dist <= (terrainState.islandRadius - padding)
 end
 
+local function clearRuntimeWorldObjects()
+    for _, obj in ipairs(Workspace:GetChildren()) do
+        if obj.Name == "_TerrainGenDone"
+            or obj.Name == "_ResourcesDone"
+            or obj.Name == "SurvivalWorld"
+            or obj.Name == "WaterPuddle"
+            or obj.Name == "NightStalker"
+            or obj.Name == "Rabbit"
+            or obj.Name == "Deer"
+            or obj.Name == "Bedroll"
+        then
+            obj:Destroy()
+        elseif obj:IsA("BasePart") then
+            if obj.Name == "TreeCrown"
+                or obj:FindFirstChild("NodeType")
+                or obj:FindFirstChild("IsCampfire")
+                or obj:GetAttribute("IsStoneOven")
+            then
+                obj:Destroy()
+            end
+        elseif obj:IsA("Model") then
+            local primary = obj.PrimaryPart
+            if primary and primary:GetAttribute("IsStoneOven") then
+                obj:Destroy()
+            end
+        end
+    end
+end
+
 function WorldService:setupLighting()
     Lighting.ClockTime = 9
     Lighting.Brightness = 1.8
@@ -152,10 +181,6 @@ function WorldService:setupLighting()
 end
 
 function WorldService:generateTerrain()
-    if Workspace:FindFirstChild("_TerrainGenDone") then
-        return
-    end
-
     local worldCfg = getWorldConfig()
     terrainState.seed = worldCfg.seed
     terrainState.halfSize = worldCfg.halfSize
@@ -167,9 +192,8 @@ function WorldService:generateTerrain()
     terrainState.oceanFloorY = -160
     terrainState.oceanSurfaceY = 0
 
-    local marker = Instance.new("BoolValue")
-    marker.Name = "_TerrainGenDone"
-    marker.Parent = Workspace
+    clearRuntimeWorldObjects()
+    table.clear(spawnedPositions)
 
     local terrain = Workspace.Terrain
     terrain:Clear()
@@ -387,14 +411,6 @@ local function makeNodePart(pos, size, color, material, nodeType)
 end
 
 function WorldService:spawnResourceNodes()
-    if Workspace:FindFirstChild("_ResourcesDone") then
-        return
-    end
-
-    local marker = Instance.new("BoolValue")
-    marker.Name = "_ResourcesDone"
-    marker.Parent = Workspace
-
     table.clear(spawnedPositions)
 
     local cfg = ctx.Config
