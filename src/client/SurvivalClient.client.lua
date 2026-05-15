@@ -1774,7 +1774,165 @@ local function refreshHud()
 	end
 end
 
+local itemAnim = {
+	EquippedItemId = nil,
+	LastItemId = nil,
+	EquipTime = 0,
+	SwingTime = 0,
+	HarvestTime = 0,
+	HitFlashTime = 0,
+	CritFlashTime = 0,
+	EquipPulse = 0,
+	SwingPulse = 0,
+	HarvestPulse = 0,
+	HitPulse = 0,
+	CritPulse = 0,
+	BobPhase = 0,
+	Roll = 0,
+	Pitch = 0,
+}
+
+local ITEM_ANIM = {
+	EquipDuration = 0.18,
+	SwingDuration = 0.22,
+	HarvestDuration = 0.24,
+	HitDuration = 0.14,
+	CritDuration = 0.22,
+	BobSpeed = 8.5,
+	BobAmount = 0.035,
+	SwingAmount = 0.11,
+	HarvestAmount = 0.095,
+	HitAmount = 0.07,
+	CritAmount = 0.1,
+}
+
+local function getEquippedHeldItemId()
+	local inventory = state.Inventory
+	if type(inventory) ~= "table" then
+		return nil
+	end
+
+	local equipped = inventory.Equipped
+	if type(equipped) == "table" then
+		local held = equipped.Weapon or equipped.Tool or equipped.EquippedItem or equipped.ActiveItem
+		if type(held) == "string" and held ~= "" then
+			return held
+		end
+	end
+
+	if type(equipped) == "string" and equipped ~= "" then
+		return equipped
+	end
+
+	return nil
+end
+
+local function getHeldItemKind(itemId)
+	if not itemId then
+		return "None"
+	end
+
+	if itemId == "StoneAxe" or itemId == "Pickaxe" then
+		return "Tool"
+	elseif itemId == "Spear" or itemId == "IronSpear" then
+		return "Weapon"
+	elseif itemId == "Bandage" or itemId == "SurvivalTonic" or itemId == "Antidote" or itemId == "CookedBerries" or itemId == "CookedMeat" or itemId == "MushroomStew" then
+		return "Consumable"
+	end
+
+	return "Item"
+end
+
+local function triggerEquipAnimation(itemId)
+	if itemAnim.LastItemId == itemId then
+		return
+	end
+
+	itemAnim.LastItemId = itemId
+	itemAnim.EquippedItemId = itemId
+	itemAnim.EquipTime = 0
+	itemAnim.EquipPulse = 1
+end
+
+local function triggerAttackAnimation()
+	itemAnim.SwingTime = 0
+	itemAnim.SwingPulse = 1
+end
+
+local function triggerHarvestAnimation(resourceId)
+	itemAnim.HarvestTime = 0
+	itemAnim.HarvestPulse = 1
+	if resourceId == "Tree" or resourceId == "Wood" then
+		itemAnim.EquippedItemId = itemAnim.EquippedItemId or "StoneAxe"
+	elseif resourceId == "Rock" or resourceId == "IronDeposit" then
+		itemAnim.EquippedItemId = itemAnim.EquippedItemId or "Pickaxe"
+	end
+end
+
+local function triggerHitPulse(isCrit)
+	itemAnim.HitFlashTime = 0
+	itemAnim.HitPulse = 1
+	if isCrit then
+		itemAnim.CritFlashTime = 0
+		itemAnim.CritPulse = 1
+	end
+end
+
+local function updateItemAnimation(deltaTime)
+	local equipped = getEquippedHeldItemId()
+	if equipped ~= itemAnim.EquippedItemId then
+		triggerEquipAnimation(equipped)
+	end
+
+	itemAnim.BobPhase += deltaTime * ITEM_ANIM.BobSpeed
+	itemAnim.EquipTime = math.min(ITEM_ANIM.EquipDuration, itemAnim.EquipTime + deltaTime)
+	itemAnim.SwingTime = math.min(ITEM_ANIM.SwingDuration, itemAnim.SwingTime + deltaTime)
+	itemAnim.HarvestTime = math.min(ITEM_ANIM.HarvestDuration, itemAnim.HarvestTime + deltaTime)
+	itemAnim.HitFlashTime = math.min(ITEM_ANIM.HitDuration, itemAnim.HitFlashTime + deltaTime)
+	itemAnim.CritFlashTime = math.min(ITEM_ANIM.CritDuration, itemAnim.CritFlashTime + deltaTime)
+
+	local equipAlpha = 1 - (itemAnim.EquipTime / ITEM_ANIM.EquipDuration)
+	local swingAlpha = 1 - (itemAnim.SwingTime / ITEM_ANIM.SwingDuration)
+	local harvestAlpha = 1 - (itemAnim.HarvestTime / ITEM_ANIM.HarvestDuration)
+	local hitAlpha = 1 - (itemAnim.HitFlashTime / ITEM_ANIM.HitDuration)
+	local critAlpha = 1 - (itemAnim.CritFlashTime / ITEM_ANIM.CritDuration)
+
+	itemAnim.EquipPulse = math.max(0, itemAnim.EquipPulse - deltaTime * 5)
+	itemAnim.SwingPulse = math.max(0, itemAnim.SwingPulse - deltaTime * 6)
+	itemAnim.HarvestPulse = math.max(0, itemAnim.HarvestPulse - deltaTime * 6)
+	itemAnim.HitPulse = math.max(0, itemAnim.HitPulse - deltaTime * 8)
+	itemAnim.CritPulse = math.max(0, itemAnim.CritPulse - deltaTime * 8)
+
+	local bob = math.sin(itemAnim.BobPhase) * ITEM_ANIM.BobAmount
+	local bob2 = math.cos(itemAnim.BobPhase * 0.5) * ITEM_ANIM.BobAmount * 0.6
+	local equipKick = ITEM_ANIM.BobAmount * 1.2 * equipAlpha * itemAnim.EquipPulse
+	local swingKick = ITEM_ANIM.SwingAmount * swingAlpha * itemAnim.SwingPulse
+	local harvestKick = ITEM_ANIM.HarvestAmount * harvestAlpha * itemAnim.HarvestPulse
+	local hitKick = ITEM_ANIM.HitAmount * hitAlpha * itemAnim.HitPulse
+	local critKick = ITEM_ANIM.CritAmount * critAlpha * itemAnim.CritPulse
+
+	local kind = getHeldItemKind(equipped)
+	local itemWeight = kind == "Weapon" and 1.0 or (kind == "Tool" and 0.85 or 0.6)
+
+	itemAnim.Roll = (bob * 0.8 + swingKick * 0.55 - harvestKick * 0.45) * itemWeight
+	itemAnim.Pitch = (bob2 * 0.6 - equipKick * 1.1 - hitKick * 0.9 - critKick * 1.25) * itemWeight
+
+	if playerGui and playerGui:FindFirstChild("Hud") then
+		local hud = playerGui.Hud
+		local quickBar = hud:FindFirstChild("QuickBar")
+		if quickBar and quickBar:IsA("Frame") then
+			quickBar.Rotation = itemAnim.Roll * 10
+			quickBar.Position = UDim2.new(quickBar.Position.X.Scale, quickBar.Position.X.Offset, quickBar.Position.Y.Scale, quickBar.Position.Y.Offset + math.floor((itemAnim.Pitch + swingKick) * 8))
+		end
+	end
+
+	if workspace.CurrentCamera then
+		workspace.CurrentCamera.CFrame = workspace.CurrentCamera.CFrame * CFrame.Angles(itemAnim.Pitch, 0, -itemAnim.Roll)
+	end
+end
+
 local function requestAttack()
+	triggerAttackAnimation()
 	request("AttackRequest")
 end
 
@@ -2201,8 +2359,13 @@ Remotes.get("InventoryUpdated").OnClientEvent:Connect(function(snapshot)
 	if type(snapshot) ~= "table" then
 		return
 	end
+	local previous = getEquippedHeldItemId()
 	state.Inventory = snapshot
 	refreshHud()
+	local current = getEquippedHeldItemId()
+	if current ~= previous then
+		triggerEquipAnimation(current)
+	end
 end)
 
 Remotes.get("VitalsUpdated").OnClientEvent:Connect(function(snapshot)
@@ -2277,7 +2440,14 @@ Remotes.get("ShopOpened").OnClientEvent:Connect(function(shopId)
 	setTab("Shops")
 end)
 
+Remotes.get("EnemyDamaged").OnClientEvent:Connect(function(payload)
+	if type(payload) == "table" then
+		triggerHitPulse(payload.IsCrit == true)
+	end
+end)
+
 Remotes.get("HarvestAnimation").OnClientEvent:Connect(function(resourceId)
+	triggerHarvestAnimation(resourceId)
 	if resourceId == "Tree" then
 		showNotification("Chop with equipped axe.", 0.9, THEME.Accent)
 	elseif resourceId == "Rock" or resourceId == "IronDeposit" then
@@ -2288,6 +2458,7 @@ end)
 RunService.RenderStepped:Connect(function(deltaTime)
 	updateSprint(deltaTime)
 	updateSwimming(deltaTime)
+	updateItemAnimation(deltaTime)
 end)
 
 task.spawn(function()
