@@ -1255,4 +1255,43 @@ SurvivalConfig.Objectives = {
 	},
 }
 
+
+SurvivalConfig.Wildlife = {
+	Rabbit = {
+		DisplayName = "Rabbit",
+		Health = 18,
+		MoveSpeed = 22,
+		WanderRadius = 28,
+		WanderIntervalSeconds = 4,
+		FleeRange = 24,
+		FleeSpeed = 30,
+		FleeDurationSeconds = 5,
+		SpawnEverySeconds = 20,
+		MaxAlive = 8,
+		SpawnRegions = { "FrostpineRise", "MoonwillowGrove", "MarketCrossing", "GlasswaterFen" },
+		Drop = {
+			RawMeat = { Min = 1, Max = 2 },
+			Fur = { Min = 1, Max = 2 },
+		},
+	},
+	Deer = {
+		DisplayName = "Deer",
+		Health = 55,
+		MoveSpeed = 14,
+		WanderRadius = 50,
+		WanderIntervalSeconds = 6,
+		FleeRange = 40,
+		FleeSpeed = 24,
+		FleeDurationSeconds = 8,
+		SpawnEverySeconds = 30,
+		MaxAlive = 5,
+		SpawnRegions = { "FrostpineRise", "MoonwillowGrove", "GlasswaterFen" },
+		Drop = {
+			RawMeat = { Min = 2, Max = 4 },
+			Hide = { Min = 1, Max = 2 },
+			Antler = { Min = 0, Max = 1 },
+		},
+	},
+}
+
 return SurvivalConfig
