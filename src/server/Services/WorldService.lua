@@ -1,5 +1,6 @@
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local WorldService = { _isWorldService = true }
@@ -8,6 +9,9 @@ local ctx
 local day = 1
 local dayTimer = 0
 local claimedResourceSpots = {}
+local CampfirePrefabBuilder
+local RoundCanopyTreePrefabBuilder
+local RealisticWorkbenchPrefabBuilder
 
 local worldState = {
     seed = 42,
@@ -179,6 +183,9 @@ local function clearGeneratedWorld()
             or obj.Name == "Deer"
             or obj.Name == "Bedroll"
             or obj.Name == "TreeCrown"
+            or obj.Name == "RoundCanopyTree"
+            or obj.Name == "Workbench"
+            or obj.Name == "Campfire"
         then
             obj:Destroy()
         elseif obj:IsA("BasePart") then
@@ -196,6 +203,23 @@ local function clearGeneratedWorld()
             end
         end
     end
+end
+
+local function loadSharedBuilder(moduleName)
+    local shared = ReplicatedStorage:FindFirstChild("Shared")
+    local assets = shared and shared:FindFirstChild("Assets")
+    local moduleScript = assets and assets:FindFirstChild(moduleName)
+    if not moduleScript or not moduleScript:IsA("ModuleScript") then
+        return nil
+    end
+
+    local ok, result = pcall(require, moduleScript)
+    if ok and type(result) == "table" then
+        return result
+    end
+
+    warn("[WorldService] Failed to load builder:", moduleName, result)
+    return nil
 end
 
 local function createResourceNode(position, size, color, material, nodeType)
@@ -445,24 +469,45 @@ function WorldService:spawnResourceNodes()
     for _ = 1, (resources.TreeCount or 0) do
         local pos = claimResourcePosition(rng, minSpacing)
         if pos then
-            createResourceNode(
-                pos + Vector3.new(0, 4, 0),
-                Vector3.new(2.5, 8, 2.5),
+            local anchor = createResourceNode(
+                pos + Vector3.new(0, 3.5, 0),
+                Vector3.new(2.6, 6.8, 2.6),
                 Color3.fromRGB(40, 32, 28),
                 Enum.Material.Wood,
                 "Tree"
             )
-            local crown = Instance.new("Part")
-            crown.Name = "TreeCrown"
-            crown.Anchored = true
-            crown.Shape = Enum.PartType.Ball
-            crown.Size = Vector3.new(7, 6, 7)
-            crown.CFrame = CFrame.new(pos + Vector3.new(0, 10, 0))
-            crown.Color = Color3.fromRGB(52, 48, 44)
-            crown.Material = Enum.Material.Grass
-            crown.CastShadow = false
-            crown.CanCollide = false
-            crown.Parent = Workspace
+            anchor.Transparency = 1
+            anchor.CanCollide = false
+            anchor.CanTouch = false
+            anchor.CastShadow = false
+
+            local prompt = anchor:FindFirstChildOfClass("ProximityPrompt")
+            if prompt then
+                prompt.ActionText = "Chop"
+                prompt.ObjectText = "Tree"
+            end
+
+            if RoundCanopyTreePrefabBuilder and RoundCanopyTreePrefabBuilder.Create then
+                local treeModel = RoundCanopyTreePrefabBuilder.Create(CFrame.new(pos.X, pos.Y, pos.Z))
+                treeModel.Parent = Workspace
+
+                local visualModel = Instance.new("ObjectValue")
+                visualModel.Name = "VisualModel"
+                visualModel.Value = treeModel
+                visualModel.Parent = anchor
+            else
+                local crown = Instance.new("Part")
+                crown.Name = "TreeCrown"
+                crown.Anchored = true
+                crown.Shape = Enum.PartType.Ball
+                crown.Size = Vector3.new(7, 6, 7)
+                crown.CFrame = CFrame.new(pos + Vector3.new(0, 10, 0))
+                crown.Color = Color3.fromRGB(52, 48, 44)
+                crown.Material = Enum.Material.Grass
+                crown.CastShadow = false
+                crown.CanCollide = false
+                crown.Parent = Workspace
+            end
         end
     end
 
@@ -511,6 +556,31 @@ end
 
 function WorldService:spawnCampfire(position)
     local grounded = self:snapToGround(position, 0.5, false)
+
+    if CampfirePrefabBuilder and CampfirePrefabBuilder.Create then
+        local model = CampfirePrefabBuilder.Create(CFrame.new(grounded.X, grounded.Y - 0.5, grounded.Z))
+        model.Parent = Workspace
+
+        local warmRadius = ((ctx.Config.Vitals and ctx.Config.Vitals.CampfireWarmRadius) or 18)
+        local warmRate = ((ctx.Config.Vitals and ctx.Config.Vitals.CampfireWarmRate) or 4)
+        model:SetAttribute("WarmthRadius", warmRadius)
+        model:SetAttribute("WarmthPerSecond", warmRate)
+
+        local root = model.PrimaryPart or model:FindFirstChild("Root")
+        if root and root:IsA("BasePart") then
+            local isCampfire = root:FindFirstChild("IsCampfire") or Instance.new("BoolValue")
+            isCampfire.Name = "IsCampfire"
+            isCampfire.Parent = root
+
+            local fuel = root:FindFirstChild("Fuel") or Instance.new("IntValue")
+            fuel.Name = "Fuel"
+            fuel.Value = 100
+            fuel.Parent = root
+        end
+
+        return model
+    end
+
     local campfire = Instance.new("Part")
     campfire.Name = "Campfire"
     campfire.Anchored = true
@@ -531,6 +601,16 @@ function WorldService:spawnCampfire(position)
     fuel.Value = 100
     campfire.Parent = Workspace
     return campfire
+end
+
+function WorldService:spawnWorkbench(position)
+    local grounded = self:snapToGround(position, 0, false)
+    if RealisticWorkbenchPrefabBuilder and RealisticWorkbenchPrefabBuilder.Create then
+        local model = RealisticWorkbenchPrefabBuilder.Create(CFrame.new(grounded.X, grounded.Y, grounded.Z))
+        model.Parent = Workspace
+        return model
+    end
+    return nil
 end
 
 function WorldService:spawnBedroll(position, ownerUserId)
@@ -591,6 +671,10 @@ end
 
 function WorldService:init(context)
     ctx = context
+    CampfirePrefabBuilder = loadSharedBuilder("CampfirePrefabBuilder")
+    RoundCanopyTreePrefabBuilder = loadSharedBuilder("RoundCanopyTreePrefabBuilder")
+    RealisticWorkbenchPrefabBuilder = loadSharedBuilder("RealisticWorkbenchPrefabBuilder")
+
     local cfg = getWorldConfig()
     day = 1
     dayTimer = (9 / 24) * cfg.dayLength
@@ -638,8 +722,18 @@ function WorldService:tick(dt)
     end
 
     for _, obj in ipairs(Workspace:GetChildren()) do
+        local campfirePart = nil
         if obj:IsA("BasePart") and obj:FindFirstChild("IsCampfire") then
-            local campPos = obj.Position
+            campfirePart = obj
+        elseif obj:IsA("Model") then
+            local root = obj.PrimaryPart or obj:FindFirstChild("Root")
+            if root and root:IsA("BasePart") and root:FindFirstChild("IsCampfire") then
+                campfirePart = root
+            end
+        end
+
+        if campfirePart then
+            local campPos = campfirePart.Position
             for _, player in ipairs(Players:GetPlayers()) do
                 local char = player.Character
                 local root = char and char:FindFirstChild("HumanoidRootPart")

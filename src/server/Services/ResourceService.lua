@@ -36,6 +36,50 @@ local function randomInt(rng, min, max)
     return rng:NextInteger(min, max)
 end
 
+local function setVisualModelActive(model, active)
+    if not model or not model:IsA("Model") then
+        return
+    end
+
+    for _, inst in ipairs(model:GetDescendants()) do
+        if inst:IsA("BasePart") then
+            if active then
+                local originalTransparency = inst:GetAttribute("OriginalTransparency")
+                local originalCanCollide = inst:GetAttribute("OriginalCanCollide")
+                local originalCanTouch = inst:GetAttribute("OriginalCanTouch")
+                local originalCanQuery = inst:GetAttribute("OriginalCanQuery")
+
+                inst.Transparency = typeof(originalTransparency) == "number" and originalTransparency or 0
+                inst.CanCollide = originalCanCollide ~= false
+                inst.CanTouch = originalCanTouch ~= false
+                inst.CanQuery = originalCanQuery ~= false
+            else
+                if inst:GetAttribute("OriginalTransparency") == nil then
+                    inst:SetAttribute("OriginalTransparency", inst.Transparency)
+                end
+                if inst:GetAttribute("OriginalCanCollide") == nil then
+                    inst:SetAttribute("OriginalCanCollide", inst.CanCollide)
+                end
+                if inst:GetAttribute("OriginalCanTouch") == nil then
+                    inst:SetAttribute("OriginalCanTouch", inst.CanTouch)
+                end
+                if inst:GetAttribute("OriginalCanQuery") == nil then
+                    inst:SetAttribute("OriginalCanQuery", inst.CanQuery)
+                end
+
+                inst.Transparency = 1
+                inst.CanCollide = false
+                inst.CanTouch = false
+                inst.CanQuery = false
+            end
+        elseif inst:IsA("ParticleEmitter") then
+            inst.Enabled = active
+        elseif inst:IsA("PointLight") or inst:IsA("SpotLight") or inst:IsA("SurfaceLight") then
+            inst.Enabled = active
+        end
+    end
+end
+
 local function harvestNode(player, node)
     local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
     if not root then
@@ -62,13 +106,16 @@ local function harvestNode(player, node)
 
     hitsLeft.Value = hitsLeft.Value - 1
 
-    local originalColor = node.Color
-    node.Color = Color3.fromRGB(255, 220, 120)
-    task.delay(0.12, function()
-        if node and node.Parent then
-            node.Color = originalColor
-        end
-    end)
+    local showHitFlash = node.Transparency < 0.95
+    if showHitFlash then
+        local originalColor = node.Color
+        node.Color = Color3.fromRGB(255, 220, 120)
+        task.delay(0.12, function()
+            if node and node.Parent then
+                node.Color = originalColor
+            end
+        end)
+    end
 
     if hitsLeft.Value > 0 then
         ctx.Remotes.Notify:FireClient(player, {
@@ -78,9 +125,23 @@ local function harvestNode(player, node)
         return
     end
 
+    if node:GetAttribute("OriginalTransparency") == nil then
+        node:SetAttribute("OriginalTransparency", node.Transparency)
+    end
+    if node:GetAttribute("OriginalCanCollide") == nil then
+        node:SetAttribute("OriginalCanCollide", node.CanCollide)
+    end
+    if node:GetAttribute("OriginalCanTouch") == nil then
+        node:SetAttribute("OriginalCanTouch", node.CanTouch)
+    end
+    if node:GetAttribute("OriginalCanQuery") == nil then
+        node:SetAttribute("OriginalCanQuery", node.CanQuery)
+    end
+
     harvested.Value   = true
     node.Transparency = 1
     node.CanCollide   = false
+    node.CanTouch     = false
 
     local configuredDrops = ctx.Config.Resources and ctx.Config.Resources.Drops
     local dropCfg = (configuredDrops and configuredDrops[nodeType.Value]) or DEFAULT_DROPS[nodeType.Value]
@@ -107,6 +168,11 @@ local function harvestNode(player, node)
         nodeId    = tostring(node),
         harvested = true,
     })
+
+    local visualModelRef = node:FindFirstChild("VisualModel")
+    if visualModelRef and visualModelRef:IsA("ObjectValue") and visualModelRef.Value then
+        setVisualModelActive(visualModelRef.Value, false)
+    end
 
     table.insert(respawnQueue, {
         node  = node,
@@ -204,6 +270,19 @@ function ResourceService:placeStructure(player, structureId, position)
         ctx.InventoryService:removeItem(player, "ShelterKit", 1)
         self:placeShelter(safePos)
         ctx.Remotes.Notify:FireClient(player, { text="Shelter built!", color="green" })
+
+    elseif structureId == "WorkbenchKit" then
+        if not ctx.InventoryService:hasItem(player, "WorkbenchKit", 1) then
+            ctx.Remotes.Notify:FireClient(player, { text="No Workbench Kit!", color="red" })
+            return
+        end
+        if not (ctx.WorldService and ctx.WorldService.spawnWorkbench) then
+            ctx.Remotes.Notify:FireClient(player, { text="Workbench system unavailable.", color="red" })
+            return
+        end
+        ctx.InventoryService:removeItem(player, "WorkbenchKit", 1)
+        ctx.WorldService:spawnWorkbench(safePos)
+        ctx.Remotes.Notify:FireClient(player, { text="Workbench placed!", color="green" })
     end
 end
 
@@ -244,8 +323,15 @@ function ResourceService:tick(dt)
                 hitsLeft.Value = (ctx.Config.Resources and ctx.Config.Resources.Hits[nodeType and nodeType.Value]) or 1
             end
             if harvested then harvested.Value = false end
-            node.Transparency = 0
-            node.CanCollide = true
+            node.Transparency = node:GetAttribute("OriginalTransparency") or 0
+            node.CanCollide = node:GetAttribute("OriginalCanCollide") ~= false
+            node.CanTouch = node:GetAttribute("OriginalCanTouch") ~= false
+            node.CanQuery = node:GetAttribute("OriginalCanQuery") ~= false
+
+            local visualModelRef = node:FindFirstChild("VisualModel")
+            if visualModelRef and visualModelRef:IsA("ObjectValue") and visualModelRef.Value then
+                setVisualModelActive(visualModelRef.Value, true)
+            end
             ctx.Remotes.ResourceChanged:FireAllClients({ nodeId=tostring(node), harvested=false })
             table.remove(respawnQueue, i)
         else
