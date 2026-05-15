@@ -10,6 +10,13 @@ local lastAttackByPlayer = {}
 local lastUnarmedHintByPlayer = {}
 local UNEQUIPPED_HINT_COOLDOWN_SECONDS = 4
 
+-- 10% base crit chance; Iron Spear gets a bonus 5% on top.
+local CRIT_CHANCE = 0.10
+local IRON_SPEAR_CRIT_BONUS = 0.05
+local CRIT_MULTIPLIER = 2.0
+
+local random = Random.new()
+
 local function getRoot(player)
 	local character = player.Character
 	if not character then
@@ -64,6 +71,18 @@ local function getClosestEnemy(root, range)
 	return closestEnemy
 end
 
+-- Returns finalDamage, isCrit
+local function calculateDamage(weaponName, baseDamage)
+	local critChance = CRIT_CHANCE
+	if weaponName == "IronSpear" then
+		critChance = critChance + IRON_SPEAR_CRIT_BONUS
+	end
+
+	local isCrit = random:NextNumber() < critChance
+	local finalDamage = isCrit and math.floor(baseDamage * CRIT_MULTIPLIER) or baseDamage
+	return finalDamage, isCrit
+end
+
 function CombatService.attack(player)
 	local now = os.clock()
 
@@ -93,7 +112,10 @@ function CombatService.attack(player)
 		return false, "No enemy in range."
 	end
 
-	local ok, message = context.EnemyService.damageEnemy(player, enemy, weaponConfig.Damage)
+	-- Apply crit roll before passing damage to EnemyService.
+	local finalDamage, isCrit = calculateDamage(weaponName, weaponConfig.Damage)
+
+	local ok, message = context.EnemyService.damageEnemy(player, enemy, finalDamage)
 	if ok then
 		if Config.Equipment[weaponName] then
 			context.InventoryService.damageEquipment(player, weaponName, 1)
@@ -105,7 +127,24 @@ function CombatService.attack(player)
 
 		local itemConfig = Config.Items[weaponName]
 		local displayName = itemConfig and itemConfig.DisplayName or weaponName
-		Remotes.get("Notification"):FireClient(player, string.format("%s: %s", displayName, message))
+
+		local hitMsg
+		if isCrit then
+			hitMsg = string.format("%s: CRITICAL! %s", displayName, message)
+		else
+			hitMsg = string.format("%s: %s", displayName, message)
+		end
+
+		Remotes.get("Notification"):FireClient(player, hitMsg)
+
+		-- Fire EnemyDamaged so the client can show a floating damage number.
+		if enemy.PrimaryPart then
+			Remotes.get("EnemyDamaged"):FireClient(player, {
+				Position = enemy:GetPivot().Position,
+				Damage = finalDamage,
+				IsCrit = isCrit,
+			})
+		end
 	end
 
 	return ok, message
