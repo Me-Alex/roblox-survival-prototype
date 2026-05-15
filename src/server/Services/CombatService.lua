@@ -48,10 +48,12 @@ local function hasStowedWeapon(player)
 	return false
 end
 
-local function getClosestEnemy(root, range)
-	local closestEnemy
+local function getClosestTarget(root, range)
+	local closestTarget
 	local closestDistance = range
+	local isWildlife = false
 
+	-- Check hostile enemies
 	for _, enemy in ipairs(context.EnemyService.getEnemies()) do
 		if enemy.PrimaryPart then
 			local offset = enemy:GetPivot().Position - root.Position
@@ -62,13 +64,32 @@ local function getClosestEnemy(root, range)
 
 				if facing > -0.15 then
 					closestDistance = distance
-					closestEnemy = enemy
+					closestTarget = enemy
+					isWildlife = false
 				end
 			end
 		end
 	end
 
-	return closestEnemy
+	-- Check passive wildlife
+	for model in pairs(context.EnemyService.getActiveWildlife()) do
+		if model.PrimaryPart then
+			local offset = model:GetPivot().Position - root.Position
+			local distance = offset.Magnitude
+
+			if distance <= closestDistance and distance > 0.1 then
+				local facing = root.CFrame.LookVector:Dot(offset.Unit)
+
+				if facing > -0.15 then
+					closestDistance = distance
+					closestTarget = model
+					isWildlife = true
+				end
+			end
+		end
+	end
+
+	return closestTarget, isWildlife
 end
 
 -- Returns finalDamage, isCrit
@@ -106,16 +127,22 @@ function CombatService.attack(player)
 		end
 	end
 
-	local enemy = getClosestEnemy(root, weaponConfig.Range)
+	local target, targetIsWildlife = getClosestTarget(root, weaponConfig.Range)
 
-	if not enemy then
+	if not target then
 		return false, "No enemy in range."
 	end
 
 	-- Apply crit roll before passing damage to EnemyService.
 	local finalDamage, isCrit = calculateDamage(weaponName, weaponConfig.Damage)
 
-	local ok, message = context.EnemyService.damageEnemy(player, enemy, finalDamage)
+	local ok, message
+	if targetIsWildlife then
+		ok, message = context.EnemyService.damageWildlife(player, target, finalDamage)
+	else
+		ok, message = context.EnemyService.damageEnemy(player, target, finalDamage)
+	end
+
 	if ok then
 		if Config.Equipment[weaponName] then
 			context.InventoryService.damageEquipment(player, weaponName, 1)
@@ -138,9 +165,9 @@ function CombatService.attack(player)
 		Remotes.get("Notification"):FireClient(player, hitMsg)
 
 		-- Fire EnemyDamaged so the client can show a floating damage number.
-		if enemy.PrimaryPart then
+		if target.PrimaryPart then
 			Remotes.get("EnemyDamaged"):FireClient(player, {
-				Position = enemy:GetPivot().Position,
+				Position = target:GetPivot().Position,
 				Damage = finalDamage,
 				IsCrit = isCrit,
 			})
