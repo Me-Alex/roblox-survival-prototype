@@ -129,49 +129,72 @@ local function getStructuresByName(modelName)
 	return structures
 end
 
+-- ═══════════════════════════════════════════════════════
+-- VOLCANIC ISLAND — colour palette & theme
+-- ═══════════════════════════════════════════════════════
 local FORTRESS_THEME = {
-	Stone = Color3.fromRGB(91, 96, 99),
-	DarkStone = Color3.fromRGB(48, 51, 55),
-	WeatheredStone = Color3.fromRGB(132, 130, 121),
-	TrimStone = Color3.fromRGB(171, 158, 124),
-	Shadow = Color3.fromRGB(20, 22, 24),
-	Path = Color3.fromRGB(137, 112, 76),
-	Roof = Color3.fromRGB(96, 63, 50),
-	Wood = Color3.fromRGB(85, 55, 36),
-	FreshWood = Color3.fromRGB(128, 82, 43),
-	Canvas = Color3.fromRGB(187, 136, 76),
-	CanvasDark = Color3.fromRGB(88, 67, 57),
-	Mud = Color3.fromRGB(80, 64, 48),
-	Smoke = Color3.fromRGB(66, 69, 71),
-	Ember = Color3.fromRGB(227, 103, 50),
-	Torch = Color3.fromRGB(255, 166, 73),
-	Grass = Color3.fromRGB(55, 94, 61),
-	Water = Color3.fromRGB(47, 126, 148),
-	MarketBlue = Color3.fromRGB(75, 128, 163),
-	MarketRed = Color3.fromRGB(170, 75, 61),
-	MarketGold = Color3.fromRGB(220, 172, 86),
-	Reed = Color3.fromRGB(93, 127, 75),
-	Crystal = Color3.fromRGB(112, 166, 206),
-	Relic = Color3.fromRGB(132, 116, 194),
+	-- stone / rock
+	Stone          = Color3.fromRGB(62, 58, 55),
+	DarkStone      = Color3.fromRGB(32, 28, 26),
+	WeatheredStone = Color3.fromRGB(98, 92, 84),
+	TrimStone      = Color3.fromRGB(140, 124, 98),
+	Shadow         = Color3.fromRGB(14, 10, 8),
+	-- wood / organic
+	Path           = Color3.fromRGB(88, 72, 52),
+	Roof           = Color3.fromRGB(72, 44, 28),
+	Wood           = Color3.fromRGB(64, 38, 22),
+	FreshWood      = Color3.fromRGB(96, 60, 30),
+	Canvas         = Color3.fromRGB(158, 112, 58),
+	CanvasDark     = Color3.fromRGB(68, 46, 32),
+	Mud            = Color3.fromRGB(55, 40, 28),
+	-- fire & lava
+	Smoke          = Color3.fromRGB(42, 38, 36),
+	Ember          = Color3.fromRGB(238, 80, 28),
+	LavaGlow       = Color3.fromRGB(255, 120, 0),
+	Torch          = Color3.fromRGB(255, 148, 40),
+	MoltenRock     = Color3.fromRGB(180, 58, 14),
+	Obsidian       = Color3.fromRGB(22, 18, 26),
+	AshGrey        = Color3.fromRGB(88, 82, 78),
+	-- nature
+	Grass          = Color3.fromRGB(38, 72, 40),
+	DryGrass       = Color3.fromRGB(96, 88, 52),
+	TropicalLeaf   = Color3.fromRGB(28, 86, 50),
+	-- water
+	Water          = Color3.fromRGB(28, 96, 124),
+	DeepWater      = Color3.fromRGB(14, 52, 78),
+	ToxicWater     = Color3.fromRGB(52, 118, 62),
+	-- market
+	MarketBlue     = Color3.fromRGB(52, 102, 138),
+	MarketRed      = Color3.fromRGB(148, 54, 40),
+	MarketGold     = Color3.fromRGB(194, 148, 52),
+	-- special
+	Reed           = Color3.fromRGB(78, 102, 52),
+	Crystal        = Color3.fromRGB(88, 148, 172),
+	Relic          = Color3.fromRGB(108, 88, 158),
+	BoneWhite      = Color3.fromRGB(208, 196, 178),
+	IceBlue        = Color3.fromRGB(148, 186, 210),
+	PoisonGreen    = Color3.fromRGB(72, 148, 52),
+	SulfurYellow   = Color3.fromRGB(188, 172, 28),
 }
 
+-- Routes between the 8 new volcanic island regions
 local MAP_ROUTES = {
-	{ "MarketCrossing", "FrostpineRise" },
-	{ "MarketCrossing", "GlasswaterFen" },
-	{ "MarketCrossing", "RustjawQuarry" },
-	{ "MarketCrossing", "WreckersCove" },
-	{ "FrostpineRise", "StarfallObservatory" },
-	{ "GlasswaterFen", "StarfallObservatory" },
-	{ "RustjawQuarry", "MoonwillowGrove" },
-	{ "WreckersCove", "AshfallFoundry" },
-	{ "MoonwillowGrove", "FrostpineRise" },
-	{ "AshfallFoundry", "GlasswaterFen" },
-	{ "RustjawQuarry", "WreckersCove" },
-	{ "StarfallObservatory", "AshfallFoundry" },
+	{ "CinderHarbour",    "AshwoodHollow"   },
+	{ "CinderHarbour",    "SaltcragShores"  },
+	{ "CinderHarbour",    "ScorchPitQuarry" },
+	{ "CinderHarbour",    "BrimstoneMarsh"  },
+	{ "AshwoodHollow",    "GlacierScar"     },
+	{ "SaltcragShores",   "GlacierScar"     },
+	{ "ScorchPitQuarry",  "DeadMansCaldera" },
+	{ "BrimstoneMarsh",   "MoltenSpireHold" },
+	{ "GlacierScar",      "DeadMansCaldera" },
+	{ "DeadMansCaldera",  "MoltenSpireHold" },
+	{ "ScorchPitQuarry",  "BrimstoneMarsh"  },
+	{ "MoltenSpireHold",  "SaltcragShores"  },
 }
 
-local LANDMARK_THEME_VERSION = "hearthmarket-isle-v2"
-local TERRAIN_THEME_VERSION = "hearthmarket-smooth-terrain-v1"
+local LANDMARK_THEME_VERSION = "volcanic-isle-v1"
+local TERRAIN_THEME_VERSION = "volcanic-isle-terrain-v1"
 
 local function clamp(value, minValue, maxValue)
 	return math.max(minValue, math.min(maxValue, value))
@@ -248,19 +271,23 @@ local function sampleTerrainHeight(x, z)
 end
 
 local function getTerrainColor(height)
-	if height >= 28 then
-		return Color3.fromRGB(83, 88, 92), Enum.Material.Slate
+	-- volcanic island: scorched peaks, obsidian midlands, ash flats, coastal sand
+	if height >= 26 then
+		return Color3.fromRGB(38, 32, 28), Enum.Material.Slate       -- dark volcanic summit rock
 	end
-	if height >= 16 then
-		return Color3.fromRGB(114, 103, 82), Enum.Material.Ground
+	if height >= 14 then
+		return Color3.fromRGB(58, 48, 42), Enum.Material.Slate       -- obsidian midland
 	end
-	if height <= -4 then
-		return Color3.fromRGB(68, 102, 86), Enum.Material.Grass
+	if height >= 4 then
+		return Color3.fromRGB(72, 62, 52), Enum.Material.Ground      -- ash-covered earth
 	end
-	if height <= 2 then
-		return Color3.fromRGB(62, 107, 74), Enum.Material.Grass
+	if height <= -3 then
+		return Color3.fromRGB(118, 104, 80), Enum.Material.Sand      -- coastal sand
 	end
-	return FORTRESS_THEME.Grass, Enum.Material.Grass
+	if height <= 1 then
+		return Color3.fromRGB(52, 68, 48), Enum.Material.Grass       -- low coastal scrub
+	end
+	return Color3.fromRGB(42, 58, 36), Enum.Material.Grass           -- sparse volcanic grass
 end
 
 local function setupTerrain(worldFolder)
@@ -466,44 +493,45 @@ local function getDiscoverableRegion(player)
 end
 
 local function setupLighting()
-	Lighting.ClockTime = 8.4
-	Lighting.Brightness = 2.45
+	-- Volcanic island atmosphere: dark orange-red skies, thick ash haze
+	Lighting.ClockTime = 9.2
+	Lighting.Brightness = 1.85
 	Lighting.GlobalShadows = true
-	Lighting.ShadowSoftness = 0.38
-	Lighting.Ambient = Color3.fromRGB(67, 74, 67)
-	Lighting.OutdoorAmbient = Color3.fromRGB(116, 125, 111)
-	Lighting.EnvironmentDiffuseScale = 0.62
-	Lighting.EnvironmentSpecularScale = TONE_DOWN_SMOOTH_SURFACES and 0.22 or 0.48
-	Lighting.ColorShift_Top = Color3.fromRGB(255, 230, 188)
-	Lighting.ColorShift_Bottom = Color3.fromRGB(87, 111, 84)
+	Lighting.ShadowSoftness = 0.55
+	Lighting.Ambient = Color3.fromRGB(58, 44, 34)
+	Lighting.OutdoorAmbient = Color3.fromRGB(94, 72, 52)
+	Lighting.EnvironmentDiffuseScale = 0.52
+	Lighting.EnvironmentSpecularScale = TONE_DOWN_SMOOTH_SURFACES and 0.14 or 0.32
+	Lighting.ColorShift_Top = Color3.fromRGB(255, 178, 88)   -- warm ash-orange sun
+	Lighting.ColorShift_Bottom = Color3.fromRGB(64, 44, 36)  -- dark volcanic shadow
 
 	pcall(function()
 		Lighting.Technology = USE_FUTURE_LIGHTING and Enum.Technology.Future or Enum.Technology.ShadowMap
 	end)
 
-	if not Lighting:FindFirstChild("SurvivalAtmosphere") then
-		local atmosphere = Instance.new("Atmosphere")
+	-- Thick volcanic ash atmosphere
+	local atmosphere = Lighting:FindFirstChild("SurvivalAtmosphere")
+	if not atmosphere then
+		atmosphere = Instance.new("Atmosphere")
 		atmosphere.Name = "SurvivalAtmosphere"
-		atmosphere.Density = 0.38
-		atmosphere.Offset = 0.1
-		atmosphere.Color = Color3.fromRGB(214, 224, 226)
-		atmosphere.Decay = Color3.fromRGB(101, 96, 84)
-		atmosphere.Glare = 0.12
-		atmosphere.Haze = 1.8
 		atmosphere.Parent = Lighting
 	end
+	atmosphere.Density = 0.58
+	atmosphere.Offset = 0.22
+	atmosphere.Color = Color3.fromRGB(172, 122, 72)     -- ash-orange haze
+	atmosphere.Decay = Color3.fromRGB(68, 44, 32)
+	atmosphere.Glare = 0.32
+	atmosphere.Haze = 3.4
 
-	if not Lighting:FindFirstChild("SurvivalSunRays") then
-		local sunRays = Instance.new("SunRaysEffect")
+	local sunRays = Lighting:FindFirstChild("SurvivalSunRays")
+	if not sunRays then
+		sunRays = Instance.new("SunRaysEffect")
 		sunRays.Name = "SurvivalSunRays"
-		sunRays.Intensity = 0.055
-		sunRays.Spread = 0.76
 		sunRays.Parent = Lighting
 	end
-	local sunRays = Lighting:FindFirstChild("SurvivalSunRays")
-	if sunRays then
-		sunRays.Enabled = ENABLE_WORLD_POST_EFFECTS
-	end
+	sunRays.Intensity = 0.09
+	sunRays.Spread = 0.88
+	sunRays.Enabled = ENABLE_WORLD_POST_EFFECTS
 
 	local bloom = Lighting:FindFirstChild("SurvivalBloom")
 	if not bloom then
@@ -511,9 +539,9 @@ local function setupLighting()
 		bloom.Name = "SurvivalBloom"
 		bloom.Parent = Lighting
 	end
-	bloom.Intensity = 0.16
-	bloom.Size = 22
-	bloom.Threshold = 1.4
+	bloom.Intensity = 0.38   -- dramatic lava bloom
+	bloom.Size = 28
+	bloom.Threshold = 0.95
 	bloom.Enabled = ENABLE_WORLD_POST_EFFECTS
 
 	local depthOfField = Lighting:FindFirstChild("SurvivalDepthOfField")
@@ -522,9 +550,9 @@ local function setupLighting()
 		depthOfField.Name = "SurvivalDepthOfField"
 		depthOfField.Parent = Lighting
 	end
-	depthOfField.FarIntensity = 0.08
-	depthOfField.FocusDistance = 85
-	depthOfField.InFocusRadius = 70
+	depthOfField.FarIntensity = 0.14
+	depthOfField.FocusDistance = 70
+	depthOfField.InFocusRadius = 55
 	depthOfField.NearIntensity = 0
 	depthOfField.Enabled = ENABLE_WORLD_POST_EFFECTS
 
@@ -534,10 +562,10 @@ local function setupLighting()
 		colorGrade.Parent = Lighting
 	end
 	colorGrade.Name = "SurvivalColorGrade"
-	colorGrade.Brightness = -0.02
-	colorGrade.Contrast = 0.16
-	colorGrade.Saturation = 0.02
-	colorGrade.TintColor = Color3.fromRGB(244, 236, 217)
+	colorGrade.Brightness = -0.06
+	colorGrade.Contrast = 0.28
+	colorGrade.Saturation = 0.12
+	colorGrade.TintColor = Color3.fromRGB(255, 218, 172)   -- warm volcanic tint
 end
 
 local function createRegionSign(region, parent)
@@ -1371,277 +1399,424 @@ local function createMarketCrossing(center, parent)
 	end
 end
 
-local function createFrostpineRise(center, parent)
+-- ═══════════════════════════════════════════════════════
+-- VOLCANIC ISLAND LANDMARK BUILDERS
+-- ═══════════════════════════════════════════════════════
+
+-- Helper: lava pool / fissure patch
+local function createLavaFissure(name, cframe, size, parent)
+	local fissure = createPart(name, size, cframe, FORTRESS_THEME.Ember, parent)
+	fissure.Material = Enum.Material.Neon
+	fissure.CanCollide = false
+	local glow = Instance.new("PointLight")
+	glow.Name = "LavaGlow"
+	glow.Brightness = 1.4
+	glow.Range = 22
+	glow.Color = FORTRESS_THEME.LavaGlow
+	glow.Parent = fissure
+	return fissure
+end
+
+-- Helper: obsidian spike / volcanic pillar
+local function createVolcanicSpire(cframe, height, parent)
+	local base = createPart("VolcanicSpireBase", Vector3.new(3.2, height * 0.55, 3.2), cframe * CFrame.new(0, height * 0.28, 0), FORTRESS_THEME.Obsidian, parent)
+	base.Material = Enum.Material.Slate
+	base.CanCollide = false
+	local tip = createPart("VolcanicSpireTip", Vector3.new(1.6, height * 0.55, 1.6), cframe * CFrame.new(0, height * 0.72, 0), FORTRESS_THEME.DarkStone, parent)
+	tip.Material = Enum.Material.Slate
+	tip.CanCollide = false
+end
+
+-- Helper: palm / tropical tree
+local function createPalmTree(cframe, parent, scale)
+	scale = scale or 1
+	local trunk = createPart("PalmTrunk", Vector3.new(1.2 * scale, 16 * scale, 1.2 * scale), cframe * CFrame.new(0, 8 * scale, 0), Color3.fromRGB(96, 62, 32), parent)
+	trunk.Shape = Enum.PartType.Cylinder
+	trunk.Material = Enum.Material.Wood
+	trunk.CanCollide = false
+	local frond = createPart("PalmFronds", Vector3.new(14 * scale, 3 * scale, 14 * scale), cframe * CFrame.new(0, 16.5 * scale, 0), FORTRESS_THEME.TropicalLeaf, parent)
+	frond.Shape = Enum.PartType.Ball
+	frond.Material = Enum.Material.Grass
+	frond.CanCollide = false
+end
+
+-- Helper: ash-covered dead tree
+local function createDeadTree(cframe, parent)
+	local trunk = createPart("DeadTrunk", Vector3.new(1.4, 12, 1.4), cframe * CFrame.new(0, 6, 0), FORTRESS_THEME.AshGrey, parent)
+	trunk.Material = Enum.Material.Wood
+	trunk.CanCollide = false
+	local branch = createPart("DeadBranch", Vector3.new(0.8, 6, 0.8), cframe * CFrame.new(2, 11, 0) * CFrame.Angles(0, 0, math.rad(42)), FORTRESS_THEME.AshGrey, parent)
+	branch.Material = Enum.Material.Wood
+	branch.CanCollide = false
+end
+
+-- ──────────────────────────────────────────────────────
+-- 1. CinderHarbour — crashed survivor camp on the coast
+-- ──────────────────────────────────────────────────────
+local function createCinderHarbour(center, parent)
 	local baseCFrame = CFrame.new(center.X, 0, center.Z)
 
-	local ridge = createPart("FrostpineRidgeShelf", Vector3.new(118, 0.34, 84), baseCFrame * CFrame.new(0, 0.22, 0), Color3.fromRGB(71, 99, 91), parent)
-	ridge.Material = Enum.Material.Grass
-	ridge.Transparency = 0.08
-	ridge.CanCollide = false
+	-- Sandy beach floor
+	local beach = createPart("HarbourBeach", Vector3.new(148, 0.3, 112), baseCFrame * CFrame.new(0, 0.18, 8), FORTRESS_THEME.BoneWhite, parent)
+	beach.Material = Enum.Material.Sand
+	beach.CanCollide = false
 
-	createWaterPatch("ColdCreek", baseCFrame * CFrame.new(18, 0.18, -4) * CFrame.Angles(0, math.rad(18), 0), Vector3.new(82, 0.34, 14), parent, Color3.fromRGB(72, 142, 165))
-	createWatchtower(baseCFrame * CFrame.new(-38, 0, 18) * CFrame.Angles(0, math.rad(34), 0), parent)
+	-- Shallow cove water
+	createWaterPatch("HarbourCove", baseCFrame * CFrame.new(18, 0.1, 52), Vector3.new(158, 0.42, 56), parent, FORTRESS_THEME.Water)
 
-	for index = 1, detailCount(58, 24) do
-		local angle = decorRandom:NextNumber(0, math.pi * 2)
-		local radius = decorRandom:NextNumber(28, 170)
-		local x = center.X + math.cos(angle) * radius
-		local z = center.Z + math.sin(angle) * radius
-		createTallPine(
-			CFrame.new(x, sampleTerrainHeight(x, z), z) * CFrame.Angles(0, decorRandom:NextNumber(0, math.pi * 2), 0),
-			parent,
-			decorRandom:NextNumber(0.86, 1.42)
-		)
+	-- Burnt-out dock
+	local dock = createPart("BurntDock", Vector3.new(14, 0.6, 52), baseCFrame * CFrame.new(-24, 0.72, 30), FORTRESS_THEME.Wood, parent)
+	dock.Material = Enum.Material.WoodPlanks
+
+	-- Wrecked ship ribs
+	for i = 1, 5 do
+		local rib = createPart("WreckRib", Vector3.new(2, 14, 24), baseCFrame * CFrame.new(14 + i * 5, 5, 36 - i * 2) * CFrame.Angles(math.rad(20), math.rad(-22), 0), FORTRESS_THEME.Wood, parent)
+		rib.Material = Enum.Material.Wood
+		rib.CanCollide = false
 	end
 
-	for index = 1, detailCount(9, 5) do
-		createLog(
-			baseCFrame * CFrame.new(-24 + index * 5, 1.2, -28) * CFrame.Angles(math.rad(90), math.rad(90), 0),
-			16,
-			parent
-		)
+	-- Camp tents + campfire scene
+	createCanvasTent("HarbourTentA", baseCFrame * CFrame.new(-18, 0, -14) * CFrame.Angles(0, math.rad(14), 0), parent)
+	createCanvasTent("HarbourTentB", baseCFrame * CFrame.new(-38, 0, 8) * CFrame.Angles(0, math.rad(-22), 0), parent)
+	createCampfireScene(baseCFrame * CFrame.new(-26, 0, -2), parent)
+
+	-- Washed-up crates
+	for i = 1, 20 do
+		local crate = createPart("WashedCrate", Vector3.new(decorRandom:NextNumber(2, 4), decorRandom:NextNumber(1.5, 3.2), decorRandom:NextNumber(2, 4)),
+			baseCFrame * CFrame.new(decorRandom:NextNumber(-62, 64), 1.2, decorRandom:NextNumber(-40, 46)) * CFrame.Angles(0, decorRandom:NextNumber(0, math.pi), 0),
+			Color3.fromRGB(88, 58, 32), parent)
+		crate.Material = Enum.Material.WoodPlanks
+		crate.CanCollide = false
+	end
+
+	-- Scattered palm trees at edge
+	for i = 1, detailCount(14, 6) do
+		local angle = decorRandom:NextNumber(0, math.pi * 2)
+		local r = decorRandom:NextNumber(48, 130)
+		createPalmTree(baseCFrame * CFrame.new(math.cos(angle) * r, 0, math.sin(angle) * r) * CFrame.Angles(0, decorRandom:NextNumber(0, math.pi * 2), 0), parent, decorRandom:NextNumber(0.8, 1.2))
 	end
 end
 
-local function createGlasswaterFen(center, parent)
+-- ──────────────────────────────────────────────────────
+-- 2. AshwoodHollow — haunted ash forest, dead trees, ember spores
+-- ──────────────────────────────────────────────────────
+local function createAshwoodHollow(center, parent)
 	local baseCFrame = CFrame.new(center.X, 0, center.Z)
-	local poolOffsets = {
-		Vector3.new(-22, 0, -10),
-		Vector3.new(20, 0, 12),
-		Vector3.new(2, 0, 40),
-	}
 
-	for index, offset in ipairs(poolOffsets) do
-		createWaterPatch(
-			"GlasswaterPool",
-			baseCFrame * CFrame.new(offset.X, 0.16, offset.Z) * CFrame.Angles(0, index * 0.42, 0),
-			Vector3.new(46 - index * 3, 0.42, 30 + index * 5),
-			parent,
-			Color3.fromRGB(63, 151, 155)
-		)
+	local floor = createPart("AshFloor", Vector3.new(136, 0.28, 118), baseCFrame * CFrame.new(0, 0.18, 0), Color3.fromRGB(68, 58, 52), parent)
+	floor.Material = Enum.Material.Ground
+	floor.CanCollide = false
+
+	-- Dead ash trees
+	for i = 1, detailCount(42, 18) do
+		local angle = decorRandom:NextNumber(0, math.pi * 2)
+		local r = decorRandom:NextNumber(22, 148)
+		createDeadTree(baseCFrame * CFrame.new(math.cos(angle) * r, sampleTerrainHeight(center.X + math.cos(angle)*r, center.Z + math.sin(angle)*r), math.sin(angle) * r) * CFrame.Angles(0, decorRandom:NextNumber(0, math.pi*2), 0), parent)
 	end
 
-	local boardwalk = createPart("FenBoardwalk", Vector3.new(96, 0.42, 7), baseCFrame * CFrame.new(2, 0.54, 12) * CFrame.Angles(0, math.rad(-17), 0), FORTRESS_THEME.FreshWood, parent)
+	-- Glowing ember spore pods on ground
+	for i = 1, detailCount(18, 8) do
+		local ox = decorRandom:NextNumber(-52, 54)
+		local oz = decorRandom:NextNumber(-48, 50)
+		local spore = createPart("EmberSpore", Vector3.new(1.8, 1.8, 1.8), baseCFrame * CFrame.new(ox, 1.2, oz), FORTRESS_THEME.Ember, parent)
+		spore.Shape = Enum.PartType.Ball
+		spore.Material = Enum.Material.Neon
+		spore.CanCollide = false
+		local gl = Instance.new("PointLight")
+		gl.Brightness = 0.6
+		gl.Range = 10
+		gl.Color = FORTRESS_THEME.LavaGlow
+		gl.Parent = spore
+	end
+
+	-- Ancient ritual obelisks
+	for i = 1, 5 do
+		local angle = (math.pi * 2) * (i / 5)
+		createVolcanicSpire(baseCFrame * CFrame.new(math.cos(angle) * 28, 0, math.sin(angle) * 28), decorRandom:NextNumber(10, 18), parent)
+	end
+
+	-- Collapsed shrine at centre
+	local shrine = createPart("AshShrine", Vector3.new(14, 1, 14), baseCFrame * CFrame.new(0, 0.7, 0), FORTRESS_THEME.WeatheredStone, parent)
+	shrine.Material = Enum.Material.Cobblestone
+	local shrinePost = createPart("AshShrinePost", Vector3.new(3, 12, 3), baseCFrame * CFrame.new(0, 7, 0), FORTRESS_THEME.Obsidian, parent)
+	shrinePost.Material = Enum.Material.Slate
+end
+
+-- ──────────────────────────────────────────────────────
+-- 3. SaltcragShores — jagged salt-crystal sea cliffs
+-- ──────────────────────────────────────────────────────
+local function createSaltcragShores(center, parent)
+	local baseCFrame = CFrame.new(center.X, 0, center.Z)
+
+	-- Rock shelf
+	local shelf = createPart("SaltShelf", Vector3.new(138, 0.38, 106), baseCFrame * CFrame.new(0, 0.22, 0), Color3.fromRGB(148, 138, 118), parent)
+	shelf.Material = Enum.Material.Slate
+	shelf.CanCollide = false
+
+	-- Sea-water pool
+	createWaterPatch("TidalPool", baseCFrame * CFrame.new(24, 0.16, 32) * CFrame.Angles(0, math.rad(12), 0), Vector3.new(84, 0.38, 44), parent, FORTRESS_THEME.DeepWater)
+
+	-- Salt crystal spires scattered
+	for i = 1, detailCount(24, 10) do
+		local ox = decorRandom:NextNumber(-58, 60)
+		local oz = decorRandom:NextNumber(-52, 54)
+		local h = decorRandom:NextNumber(6, 18)
+		local crystal = createPart("SaltCrystal", Vector3.new(decorRandom:NextNumber(2.5, 5), h, decorRandom:NextNumber(2.5, 5)),
+			baseCFrame * CFrame.new(ox, h * 0.5, oz) * CFrame.Angles(decorRandom:NextNumber(-0.12, 0.12), decorRandom:NextNumber(0, math.pi), decorRandom:NextNumber(-0.1, 0.1)),
+			FORTRESS_THEME.IceBlue, parent)
+		crystal.Material = Enum.Material.Glass
+		crystal.Transparency = 0.18
+		crystal.CanCollide = false
+	end
+
+	-- Collapsed cliff wall rims
+	local rimCount = detailCount(20, 10)
+	for i = 1, rimCount do
+		local angle = (math.pi * 2) * (i / rimCount)
+		local rx = 72 + decorRandom:NextNumber(-6, 8)
+		local rz = 54 + decorRandom:NextNumber(-5, 7)
+		local rimBlock = createPart("CliffRimBlock", Vector3.new(decorRandom:NextNumber(6, 14), decorRandom:NextNumber(5, 12), decorRandom:NextNumber(6, 14)),
+			baseCFrame * CFrame.new(math.cos(angle) * rx, 3, math.sin(angle) * rz), FORTRESS_THEME.WeatheredStone, parent)
+		rimBlock.Material = Enum.Material.Slate
+	end
+
+	-- Survival outpost at cliff top
+	createSurvivalOutpost(baseCFrame * CFrame.new(-22, 0, -18), parent)
+end
+
+-- ──────────────────────────────────────────────────────
+-- 4. ScorchPitQuarry — abandoned mining pit, burnt scaffolding
+-- ──────────────────────────────────────────────────────
+local function createScorchPitQuarry(center, parent)
+	local baseCFrame = CFrame.new(center.X, 0, center.Z)
+
+	-- Pit floor
+	local pit = createPart("ScorchPitFloor", Vector3.new(124, 0.38, 98), baseCFrame * CFrame.new(0, 0.18, 0), Color3.fromRGB(58, 44, 34), parent)
+	pit.Material = Enum.Material.Slate
+	pit.CanCollide = false
+
+	-- Lava fissures in the pit floor
+	local fissureOffsets = { Vector3.new(-18, 0, -8), Vector3.new(22, 0, 14), Vector3.new(-4, 0, 36) }
+	for _, off in ipairs(fissureOffsets) do
+		createLavaFissure("PitFissure", baseCFrame * CFrame.new(off.X, 0.28, off.Z), Vector3.new(28, 0.38, 10), parent)
+	end
+
+	-- Burnt scaffolding gantry
+	local gA = createPart("ScaffoldPoleA", Vector3.new(3, 28, 3), baseCFrame * CFrame.new(-32, 14, -20), FORTRESS_THEME.Wood, parent)
+	gA.Material = Enum.Material.Wood
+	local gB = createPart("ScaffoldPoleB", Vector3.new(3, 28, 3), baseCFrame * CFrame.new(32, 14, -20), FORTRESS_THEME.Wood, parent)
+	gB.Material = Enum.Material.Wood
+	local beam = createPart("ScaffoldBeam", Vector3.new(70, 3, 3), baseCFrame * CFrame.new(0, 28, -20), FORTRESS_THEME.FreshWood, parent)
+	beam.Material = Enum.Material.WoodPlanks
+	local chain = createPart("LiftChain", Vector3.new(0.6, 14, 0.6), baseCFrame * CFrame.new(0, 20, -20), Color3.fromRGB(48, 44, 40), parent)
+	chain.Material = Enum.Material.Metal
+
+	-- Boulder rim
+	local rimCount = detailCount(28, 14)
+	for i = 1, rimCount do
+		local angle = (math.pi * 2) * (i / rimCount)
+		local boulder = createPart("QuarryBoulder", Vector3.new(decorRandom:NextNumber(5, 11), decorRandom:NextNumber(4, 10), decorRandom:NextNumber(5, 11)),
+			baseCFrame * CFrame.new(math.cos(angle) * (66 + decorRandom:NextNumber(-6, 8)), 3, math.sin(angle) * (50 + decorRandom:NextNumber(-4, 6))),
+			Color3.fromRGB(62, 52, 44), parent)
+		boulder.Shape = Enum.PartType.Ball
+		boulder.Material = Enum.Material.Slate
+	end
+
+	-- Molten runoff channels
+	for i = -1, 1 do
+		local channel = createPart("MoltenRunoff", Vector3.new(6, 0.28, 84),
+			baseCFrame * CFrame.new(i * 20, 0.72, 0) * CFrame.Angles(0, math.rad(i * 7), 0), FORTRESS_THEME.Ember, parent)
+		channel.Material = Enum.Material.Neon
+		channel.CanCollide = false
+	end
+end
+
+-- ──────────────────────────────────────────────────────
+-- 5. BrimstoneMarsh — toxic sulfur swamp, glowing pools
+-- ──────────────────────────────────────────────────────
+local function createBrimstoneMarsh(center, parent)
+	local baseCFrame = CFrame.new(center.X, 0, center.Z)
+
+	-- Muddy ground
+	local mud = createPart("MarshMud", Vector3.new(138, 0.3, 118), baseCFrame * CFrame.new(0, 0.18, 0), Color3.fromRGB(48, 44, 32), parent)
+	mud.Material = Enum.Material.Mud
+	mud.CanCollide = false
+
+	-- Toxic sulfur pools
+	local poolOffsets = { Vector3.new(-28, 0, -12), Vector3.new(22, 0, 18), Vector3.new(4, 0, 42), Vector3.new(-8, 0, -38) }
+	for i, off in ipairs(poolOffsets) do
+		local pool = createPart("SulfurPool", Vector3.new(38 - i * 2, 0.44, 26 + i * 4),
+			baseCFrame * CFrame.new(off.X, 0.24, off.Z) * CFrame.Angles(0, i * 0.38, 0), FORTRESS_THEME.SulfurYellow, parent)
+		pool.Material = Enum.Material.Neon
+		pool.Transparency = 0.28
+		pool.CanCollide = false
+		local gl = Instance.new("PointLight")
+		gl.Brightness = 0.8
+		gl.Range = 18
+		gl.Color = FORTRESS_THEME.SulfurYellow
+		gl.Parent = pool
+	end
+
+	-- Rotted boardwalk
+	local boardwalk = createPart("MarshBoardwalk", Vector3.new(102, 0.44, 6),
+		baseCFrame * CFrame.new(4, 0.58, 10) * CFrame.Angles(0, math.rad(-22), 0), FORTRESS_THEME.Wood, parent)
 	boardwalk.Material = Enum.Material.WoodPlanks
 
-	for index = 1, detailCount(34, 14) do
+	-- Marsh reeds
+	for i = 1, detailCount(38, 16) do
 		local angle = decorRandom:NextNumber(0, math.pi * 2)
-		local radius = decorRandom:NextNumber(20, 92)
-		local reed = createPart(
-			"FenReed",
-			Vector3.new(0.45, decorRandom:NextNumber(4.5, 8.5), 0.45),
-			baseCFrame * CFrame.new(math.cos(angle) * radius, 3.2, math.sin(angle) * radius),
-			FORTRESS_THEME.Reed,
-			parent
-		)
+		local r = decorRandom:NextNumber(18, 98)
+		local reed = createPart("MarshReed", Vector3.new(0.44, decorRandom:NextNumber(4, 8), 0.44),
+			baseCFrame * CFrame.new(math.cos(angle) * r, 3.2, math.sin(angle) * r), FORTRESS_THEME.Reed, parent)
 		reed.Material = Enum.Material.Grass
 		reed.CanCollide = false
 	end
 
-	for index = 1, detailCount(11, 6) do
-		local shard = createPart(
-			"GlasswaterShard",
-			Vector3.new(1.8, decorRandom:NextNumber(6, 12), 1.8),
-			baseCFrame * CFrame.new(decorRandom:NextNumber(-48, 50), 3.5, decorRandom:NextNumber(-48, 52))
-				* CFrame.Angles(decorRandom:NextNumber(-0.22, 0.22), decorRandom:NextNumber(0, math.pi), decorRandom:NextNumber(-0.18, 0.18)),
-			FORTRESS_THEME.Crystal,
-			parent
-		)
-		shard.Material = Enum.Material.Glass
-		shard.Transparency = 0.1
-		shard.CanCollide = false
+	-- Watchtower for safety
+	createWatchtower(baseCFrame * CFrame.new(-44, 0, -28) * CFrame.Angles(0, math.rad(22), 0), parent)
+end
+
+-- ──────────────────────────────────────────────────────
+-- 6. GlacierScar — frozen anomaly, ice and cold in volcanic land
+-- ──────────────────────────────────────────────────────
+local function createGlacierScar(center, parent)
+	local baseCFrame = CFrame.new(center.X, 0, center.Z)
+
+	local iceFloor = createPart("GlacierFloor", Vector3.new(128, 0.3, 108), baseCFrame * CFrame.new(0, 0.18, 0), FORTRESS_THEME.IceBlue, parent)
+	iceFloor.Material = Enum.Material.Ice
+	iceFloor.Transparency = 0.12
+	iceFloor.CanCollide = false
+
+	-- Ice spire field
+	for i = 1, detailCount(32, 14) do
+		local ox = decorRandom:NextNumber(-56, 58)
+		local oz = decorRandom:NextNumber(-50, 52)
+		local h = decorRandom:NextNumber(8, 26)
+		local spire = createPart("IceSpire", Vector3.new(decorRandom:NextNumber(2, 4.5), h, decorRandom:NextNumber(2, 4.5)),
+			baseCFrame * CFrame.new(ox, h * 0.5, oz) * CFrame.Angles(decorRandom:NextNumber(-0.08, 0.08), decorRandom:NextNumber(0, math.pi), decorRandom:NextNumber(-0.06, 0.06)),
+			FORTRESS_THEME.IceBlue, parent)
+		spire.Material = Enum.Material.Glass
+		spire.Transparency = 0.14
+		spire.CanCollide = false
+	end
+
+	-- Frozen underground spring
+	createWaterPatch("FrozenSpring", baseCFrame * CFrame.new(-8, 0.16, 4), Vector3.new(48, 0.36, 32), parent, FORTRESS_THEME.IceBlue)
+
+	-- Relic buried in ice
+	local relic = createPart("FrozenRelic", Vector3.new(6, 6, 6), baseCFrame * CFrame.new(0, 3.5, 0), FORTRESS_THEME.Relic, parent)
+	relic.Shape = Enum.PartType.Ball
+	relic.Material = Enum.Material.Glass
+	relic.Transparency = 0.35
+	relic.CanCollide = false
+	local relicGlow = Instance.new("PointLight")
+	relicGlow.Brightness = 1.2
+	relicGlow.Range = 28
+	relicGlow.Color = FORTRESS_THEME.Relic
+	relicGlow.Parent = relic
+
+	createSurvivalOutpost(baseCFrame * CFrame.new(28, 0, -22), parent)
+end
+
+-- ──────────────────────────────────────────────────────
+-- 7. DeadMansCaldera — giant volcanic crater, dangerous centre
+-- ──────────────────────────────────────────────────────
+local function createDeadMansCaldera(center, parent)
+	local baseCFrame = CFrame.new(center.X, 0, center.Z)
+
+	-- Ash floor of crater
+	local calderaFloor = createPart("CalderaFloor", Vector3.new(148, 0.42, 126), baseCFrame * CFrame.new(0, 0.22, 0), Color3.fromRGB(42, 34, 28), parent)
+	calderaFloor.Material = Enum.Material.Slate
+	calderaFloor.CanCollide = false
+
+	-- Central lava lake
+	createLavaFissure("CalderaLavaLake", baseCFrame * CFrame.new(0, 0.46, 0), Vector3.new(72, 0.58, 54), parent)
+
+	-- Lava river tendrils from lake
+	local riverAngles = { 0, 60, 130, 220, 310 }
+	for _, deg in ipairs(riverAngles) do
+		local rad = math.rad(deg)
+		local river = createPart("CalderaRiver", Vector3.new(8, 0.32, 58),
+			baseCFrame * CFrame.new(math.cos(rad) * 56, 0.34, math.sin(rad) * 42) * CFrame.Angles(0, rad, 0), FORTRESS_THEME.Ember, parent)
+		river.Material = Enum.Material.Neon
+		river.CanCollide = false
+	end
+
+	-- Crater rim boulders
+	local rimCount = detailCount(30, 16)
+	for i = 1, rimCount do
+		local angle = (math.pi * 2) * (i / rimCount)
+		local rx = 82 + decorRandom:NextNumber(-8, 10)
+		local rz = 68 + decorRandom:NextNumber(-6, 8)
+		local boulder = createPart("CraterRimRock", Vector3.new(decorRandom:NextNumber(7, 16), decorRandom:NextNumber(6, 14), decorRandom:NextNumber(7, 16)),
+			baseCFrame * CFrame.new(math.cos(angle) * rx, 4, math.sin(angle) * rz), FORTRESS_THEME.DarkStone, parent)
+		boulder.Material = Enum.Material.Slate
+	end
+
+	-- Tall obsidian obelisk at rim
+	local obeliskCount = detailCount(8, 4)
+	for i = 1, obeliskCount do
+		local angle = (math.pi * 2) * (i / obeliskCount)
+		createVolcanicSpire(baseCFrame * CFrame.new(math.cos(angle) * 68, 0, math.sin(angle) * 54), decorRandom:NextNumber(18, 30), parent)
+	end
+
+	-- Dangerous atmosphere torches ringing the rim
+	local torchCount = detailCount(10, 6)
+	for i = 1, torchCount do
+		local angle = (math.pi * 2) * (i / torchCount)
+		createTorch(baseCFrame * CFrame.new(math.cos(angle) * 78, 0, math.sin(angle) * 60), parent)
 	end
 end
 
-local function createRustjawQuarry(center, parent)
+-- ──────────────────────────────────────────────────────
+-- 8. MoltenSpireHold — fortress built on volcanic rock, endgame
+-- ──────────────────────────────────────────────────────
+local function createMoltenSpireHold(center, parent)
 	local baseCFrame = CFrame.new(center.X, 0, center.Z)
 
-	local pit = createPart("QuarryPitFloor", Vector3.new(116, 0.36, 92), baseCFrame * CFrame.new(0, 0.18, 0), Color3.fromRGB(111, 94, 79), parent)
-	pit.Material = Enum.Material.Slate
-	pit.Transparency = 0.08
-
-	local quarryWallCount = detailCount(26, 12)
-	for index = 1, quarryWallCount do
-		local angle = (math.pi * 2) * (index / quarryWallCount)
-		local radiusX = 64 + decorRandom:NextNumber(-7, 8)
-		local radiusZ = 48 + decorRandom:NextNumber(-5, 7)
-		local wall = createPart(
-			"QuarryRimBoulder",
-			Vector3.new(decorRandom:NextNumber(5, 11), decorRandom:NextNumber(4, 10), decorRandom:NextNumber(5, 11)),
-			baseCFrame * CFrame.new(math.cos(angle) * radiusX, 2.4, math.sin(angle) * radiusZ),
-			Color3.fromRGB(89, 85, 80),
-			parent
-		)
-		wall.Shape = Enum.PartType.Ball
-		wall.Material = Enum.Material.Slate
-	end
-
-	local gantryA = createPart("QuarryGantryA", Vector3.new(3, 24, 3), baseCFrame * CFrame.new(-28, 12, -18), FORTRESS_THEME.Wood, parent)
-	gantryA.Material = Enum.Material.Wood
-	local gantryB = createPart("QuarryGantryB", Vector3.new(3, 24, 3), baseCFrame * CFrame.new(28, 12, -18), FORTRESS_THEME.Wood, parent)
-	gantryB.Material = Enum.Material.Wood
-	local beam = createPart("QuarryGantryBeam", Vector3.new(64, 3, 3), baseCFrame * CFrame.new(0, 24, -18), FORTRESS_THEME.FreshWood, parent)
-	beam.Material = Enum.Material.WoodPlanks
-	local chain = createPart("QuarryLiftChain", Vector3.new(0.55, 13, 0.55), baseCFrame * CFrame.new(0, 16, -18), Color3.fromRGB(60, 57, 54), parent)
-	chain.Material = Enum.Material.Metal
-
-end
-
-local function createWreckersCove(center, parent)
-	local baseCFrame = CFrame.new(center.X, 0, center.Z)
-
-	local beach = createPart("CoveBeach", Vector3.new(128, 0.28, 92), baseCFrame * CFrame.new(0, 0.18, 8), Color3.fromRGB(131, 119, 91), parent)
-	beach.Material = Enum.Material.Sand
-	beach.CanCollide = false
-
-	createWaterPatch("CoveWaterline", baseCFrame * CFrame.new(16, 0.05, 46), Vector3.new(146, 0.38, 48), parent, Color3.fromRGB(52, 126, 155))
-
-	local dock = createPart("CoveDock", Vector3.new(12, 0.6, 58), baseCFrame * CFrame.new(-30, 0.7, 26), FORTRESS_THEME.FreshWood, parent)
-	dock.Material = Enum.Material.WoodPlanks
-
-	for index = 1, 4 do
-		local rib = createPart(
-			"WreckedHullRib",
-			Vector3.new(2.2, 16, 28),
-			baseCFrame * CFrame.new(18 + index * 5, 5.5, 34 - index * 2) * CFrame.Angles(math.rad(18), math.rad(-28), 0),
-			FORTRESS_THEME.Wood,
-			parent
-		)
-		rib.Material = Enum.Material.Wood
-	end
-
-	local mast = createLog(baseCFrame * CFrame.new(20, 10, 22) * CFrame.Angles(math.rad(63), math.rad(18), 0), 42, parent)
-	mast.Name = "BrokenShipMast"
-
-	createCanvasTent("WreckerTent", baseCFrame * CFrame.new(-8, 0, -22) * CFrame.Angles(0, math.rad(28), 0), parent)
-
-	for index = 1, 18 do
-		local crate = createPart(
-			"WashedCrate",
-			Vector3.new(decorRandom:NextNumber(2.2, 4.2), decorRandom:NextNumber(1.8, 3.6), decorRandom:NextNumber(2.2, 4.2)),
-			baseCFrame * CFrame.new(decorRandom:NextNumber(-52, 60), 1.2, decorRandom:NextNumber(-35, 42)) * CFrame.Angles(0, decorRandom:NextNumber(0, math.pi), 0),
-			Color3.fromRGB(100, 69, 43),
-			parent
-		)
-		crate.Material = Enum.Material.WoodPlanks
-		crate.CanCollide = false
-	end
-end
-
-local function createMoonwillowGrove(center, parent)
-	local baseCFrame = CFrame.new(center.X, 0, center.Z)
-
-	local glade = createPart("MoonwillowGlade", Vector3.new(122, 0.25, 104), baseCFrame * CFrame.new(0, 0.16, 0), Color3.fromRGB(50, 92, 78), parent)
-	glade.Material = Enum.Material.Grass
-	glade.Transparency = 0.08
-	glade.CanCollide = false
-
-	local moonwillowRingCount = detailCount(12, 6)
-	for index = 1, moonwillowRingCount do
-		local angle = (math.pi * 2) * (index / moonwillowRingCount)
-		local x = math.cos(angle) * 44
-		local z = math.sin(angle) * 36
-		createTallPine(baseCFrame * CFrame.new(x, 0, z) * CFrame.Angles(0, angle, 0), parent, 1.15)
-		local lantern = createPart("MoonwillowLantern", Vector3.new(1.1, 1.1, 1.1), baseCFrame * CFrame.new(x * 0.84, 10, z * 0.84), FORTRESS_THEME.Relic, parent)
-		lantern.Shape = Enum.PartType.Ball
-		lantern.Material = Enum.Material.Neon
-		lantern.CanCollide = false
-		local light = Instance.new("PointLight")
-		light.Name = "MoonwillowGlow"
-		light.Brightness = 0.85
-		light.Range = 16
-		light.Color = FORTRESS_THEME.Relic
-		light.Parent = lantern
-	end
-
-	local shrine = createPart("GroveShrine", Vector3.new(18, 1.2, 18), baseCFrame * CFrame.new(0, 0.8, 0), FORTRESS_THEME.WeatheredStone, parent)
-	shrine.Material = Enum.Material.Cobblestone
-	local obelisk = createPart("GroveObelisk", Vector3.new(4, 18, 4), baseCFrame * CFrame.new(0, 9.8, 0), FORTRESS_THEME.Relic, parent)
-	obelisk.Material = Enum.Material.Slate
-end
-
-local function createAshfallFoundry(center, parent)
-	local baseCFrame = CFrame.new(center.X, 0, center.Z)
-
-	local yard = createPart("FoundryYard", Vector3.new(124, 0.45, 104), baseCFrame * CFrame.new(0, 0.25, 0), Color3.fromRGB(96, 78, 67), parent)
+	-- Fortress yard of scorched stone
+	local yard = createPart("SpireYard", Vector3.new(138, 0.48, 118), baseCFrame * CFrame.new(0, 0.28, 0), Color3.fromRGB(52, 42, 34), parent)
 	yard.Material = Enum.Material.Cobblestone
 
-	for _, offset in ipairs({
-		Vector3.new(-28, 0, -14),
-		Vector3.new(24, 0, 18),
-	}) do
-		local furnace = createPart("FoundryFurnace", Vector3.new(18, 22, 18), baseCFrame * CFrame.new(offset.X, 11, offset.Z), FORTRESS_THEME.DarkStone, parent)
-		furnace.Material = Enum.Material.Slate
-		local mouth = createPart("FurnaceMouth", Vector3.new(10, 8, 0.5), baseCFrame * CFrame.new(offset.X, 6, offset.Z - 9.2), FORTRESS_THEME.Ember, parent)
+	-- Two massive erupting smelter towers
+	for _, off in ipairs({ Vector3.new(-32, 0, -18), Vector3.new(28, 0, 22) }) do
+		local tower = createPart("SmelterTower", Vector3.new(20, 26, 20), baseCFrame * CFrame.new(off.X, 13, off.Z), FORTRESS_THEME.DarkStone, parent)
+		tower.Material = Enum.Material.Slate
+		local mouth = createPart("TowerMouth", Vector3.new(12, 9, 0.5), baseCFrame * CFrame.new(off.X, 7, off.Z - 10.2), FORTRESS_THEME.Ember, parent)
 		mouth.Material = Enum.Material.Neon
 		mouth.CanCollide = false
-		local stack = createPart("FoundryStack", Vector3.new(7, 28, 7), baseCFrame * CFrame.new(offset.X, 34, offset.Z), FORTRESS_THEME.Smoke, parent)
+		local stack = createPart("TowerStack", Vector3.new(8, 32, 8), baseCFrame * CFrame.new(off.X, 42, off.Z), FORTRESS_THEME.Smoke, parent)
 		stack.Shape = Enum.PartType.Cylinder
 		stack.Material = Enum.Material.Metal
-		createTorch(baseCFrame * CFrame.new(offset.X + 13, 0, offset.Z - 12), parent)
+		-- Lava glow from mouth
+		local gl = Instance.new("PointLight")
+		gl.Brightness = 2.2
+		gl.Range = 38
+		gl.Color = FORTRESS_THEME.LavaGlow
+		gl.Parent = mouth
+		createTorch(baseCFrame * CFrame.new(off.X + 14, 0, off.Z - 14), parent)
 	end
 
-	for index = -1, 1 do
-		local channel = createPart(
-			"MoltenRunoff",
-			Vector3.new(7, 0.28, 76),
-			baseCFrame * CFrame.new(index * 18, 0.72, 0) * CFrame.Angles(0, math.rad(index * 8), 0),
-			FORTRESS_THEME.Ember,
-			parent
-		)
-		channel.Material = Enum.Material.Neon
-		channel.CanCollide = false
+	-- Molten runoff channels from towers
+	for i = -1, 1 do
+		local ch = createPart("SpireRunoff", Vector3.new(7, 0.3, 88),
+			baseCFrame * CFrame.new(i * 22, 0.78, 0) * CFrame.Angles(0, math.rad(i * 9), 0), FORTRESS_THEME.Ember, parent)
+		ch.Material = Enum.Material.Neon
+		ch.CanCollide = false
 	end
 
-end
+	-- Battlement walls on all 4 sides
+	createBattlementWall("SpireWallN", baseCFrame * CFrame.new(0, 0, -56) * CFrame.Angles(0, 0, 0), 136, 12, parent)
+	createBattlementWall("SpireWallS", baseCFrame * CFrame.new(0, 0, 56) * CFrame.Angles(0, math.rad(180), 0), 136, 12, parent)
+	createBattlementWall("SpireWallW", baseCFrame * CFrame.new(-68, 0, 0) * CFrame.Angles(0, math.rad(90), 0), 116, 12, parent)
+	createBattlementWall("SpireWallE", baseCFrame * CFrame.new(68, 0, 0) * CFrame.Angles(0, math.rad(-90), 0), 116, 12, parent)
 
-local function createStarfallObservatory(center, parent)
-	local baseCFrame = CFrame.new(center.X, 0, center.Z)
+	-- Gatehouse entrance
+	createGatehouse(baseCFrame * CFrame.new(0, 0, -56) * CFrame.Angles(0, 0, 0), parent)
 
-	local platform = createPart("ObservatoryPlatform", Vector3.new(104, 0.5, 104), baseCFrame * CFrame.new(0, 0.3, 0), Color3.fromRGB(94, 90, 116), parent)
-	platform.Material = Enum.Material.Slate
-
-	local observatoryRingSegments = detailCount(16, 10)
-	for ring = 1, 3 do
-		local radius = 18 + ring * 15
-		for index = 1, observatoryRingSegments do
-			local angle = (math.pi * 2) * (index / observatoryRingSegments)
-			local stone = createPart(
-				"ObservatoryRingStone",
-				Vector3.new(4.6, 0.7, 2.1),
-				baseCFrame * CFrame.new(math.cos(angle) * radius, 0.86 + ring * 0.08, math.sin(angle) * radius) * CFrame.Angles(0, -angle, 0),
-				ring == 2 and FORTRESS_THEME.Relic or FORTRESS_THEME.WeatheredStone,
-				parent
-			)
-			stone.Material = Enum.Material.Slate
-			stone.CanCollide = false
-		end
-	end
-
-	local tower = createPart("ObservatoryTower", Vector3.new(18, 38, 18), baseCFrame * CFrame.new(0, 19, -10), FORTRESS_THEME.DarkStone, parent)
-	tower.Material = Enum.Material.Slate
-	local dome = createPart("ObservatoryDome", Vector3.new(24, 16, 24), baseCFrame * CFrame.new(0, 43, -10), FORTRESS_THEME.Relic, parent)
-	dome.Shape = Enum.PartType.Ball
-	dome.Material = Enum.Material.Glass
-	dome.Transparency = 0.12
-
-	local telescope = createLog(baseCFrame * CFrame.new(0, 47, -3) * CFrame.Angles(math.rad(65), math.rad(12), math.rad(90)), 34, parent)
-	telescope.Name = "StarfallTelescope"
-	telescope.Color = FORTRESS_THEME.TrimStone
-	telescope.Material = Enum.Material.Metal
-
-	for index = 1, detailCount(14, 8) do
-		local shard = createPart(
-			"StarfallShard",
-			Vector3.new(1.5, decorRandom:NextNumber(7, 16), 1.5),
-			baseCFrame * CFrame.new(decorRandom:NextNumber(-58, 58), 4.5, decorRandom:NextNumber(-58, 58))
-				* CFrame.Angles(decorRandom:NextNumber(-0.2, 0.2), decorRandom:NextNumber(0, math.pi), decorRandom:NextNumber(-0.2, 0.2)),
-			FORTRESS_THEME.Relic,
-			parent
-		)
-		shard.Material = Enum.Material.Neon
-		shard.Transparency = 0.08
-		shard.CanCollide = false
+	-- Obsidian obelisks at corners
+	for _, corner in ipairs({ Vector3.new(-58, 0, -46), Vector3.new(58, 0, -46), Vector3.new(-58, 0, 46), Vector3.new(58, 0, 46) }) do
+		createVolcanicSpire(baseCFrame * CFrame.new(corner.X, 0, corner.Z), 22, parent)
 	end
 end
 
@@ -1650,43 +1825,25 @@ local function createRegionLandmark(region, parent)
 	model.Name = "Landmark_" .. region.Id
 	model.Parent = parent
 
-	local center = region.Center
-	local color = region.Color or Color3.fromRGB(95, 110, 90)
-	local base = createPart(
-		"RegionGround",
-		Vector3.new(region.Radius * 1.45, 0.2, region.Radius * 1.45),
-		CFrame.new(center.X, 0.08, center.Z),
-		color,
-		model
-	)
-	base.Material = Enum.Material.Grass
-	base.Transparency = 0.34
-	base.CanCollide = false
-	base.CanTouch = false
-	base.CanQuery = false
-
-	if region.Id == "MarketCrossing" then
-		createMarketCrossing(center, model)
-	elseif region.Id == "FrostpineRise" then
-		createFrostpineRise(center, model)
-	elseif region.Id == "GlasswaterFen" then
-		createGlasswaterFen(center, model)
-	elseif region.Id == "RustjawQuarry" then
-		createRustjawQuarry(center, model)
-	elseif region.Id == "WreckersCove" then
-		createWreckersCove(center, model)
-	elseif region.Id == "MoonwillowGrove" then
-		createMoonwillowGrove(center, model)
-	elseif region.Id == "AshfallFoundry" then
-		createAshfallFoundry(center, model)
-	elseif region.Id == "StarfallObservatory" then
-		createStarfallObservatory(center, model)
-	else
-		local marker = createPart("MeadowMarker", Vector3.new(9, 4, 9), CFrame.new(center.X, 2, center.Z), FORTRESS_THEME.WeatheredStone, model)
-		marker.Material = Enum.Material.Slate
-	end
-
 	createRegionSign(region, model)
+
+	if region.Id == "CinderHarbour" then
+		createCinderHarbour(region.Center, model)
+	elseif region.Id == "AshwoodHollow" then
+		createAshwoodHollow(region.Center, model)
+	elseif region.Id == "SaltcragShores" then
+		createSaltcragShores(region.Center, model)
+	elseif region.Id == "ScorchPitQuarry" then
+		createScorchPitQuarry(region.Center, model)
+	elseif region.Id == "BrimstoneMarsh" then
+		createBrimstoneMarsh(region.Center, model)
+	elseif region.Id == "GlacierScar" then
+		createGlacierScar(region.Center, model)
+	elseif region.Id == "DeadMansCaldera" then
+		createDeadMansCaldera(region.Center, model)
+	elseif region.Id == "MoltenSpireHold" then
+		createMoltenSpireHold(region.Center, model)
+	end
 end
 
 local function createTrail(fromPosition, toPosition, parent, width)
@@ -1853,12 +2010,13 @@ local function setupLandmarks(worldFolder)
 	end
 
 	createTrail(getSpawnPoint(), Vector3.new(0, 0, 16), landmarks, 12)
-	createRoadMarker(Vector3.new(0, 0, -112), landmarks, "NorthMarketGate")
-	createRoadMarker(Vector3.new(-132, 0, -24), landmarks, "WestTradeFork")
-	createRoadMarker(Vector3.new(132, 0, -20), landmarks, "EastTradeFork")
-	createRoadMarker(Vector3.new(-8, 0, 126), landmarks, "SouthTradeFork")
-	createRoadMarker(Vector3.new(-272, 0, -76), landmarks, "MoonwillowRoad")
-	createRoadMarker(Vector3.new(274, 0, 76), landmarks, "FoundryRoad")
+	-- Volcanic island road markers
+	createRoadMarker(Vector3.new(0, 0, -118), landmarks, "NorthHarbourGate")
+	createRoadMarker(Vector3.new(-138, 0, -28), landmarks, "WestAshFork")
+	createRoadMarker(Vector3.new(138, 0, -24), landmarks, "EastSaltFork")
+	createRoadMarker(Vector3.new(-8, 0, 132), landmarks, "SouthScorchFork")
+	createRoadMarker(Vector3.new(-278, 0, -82), landmarks, "GlacierPass")
+	createRoadMarker(Vector3.new(280, 0, 78), landmarks, "CalderaRoad")
 
 	local spawnPoint = getSpawnPoint()
 	local spawnRingCount = detailCount(12, 8)
