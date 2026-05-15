@@ -1,13 +1,11 @@
--- Remotes.lua  (Milestone 8 — added PlaceOvenRequest)
--- Central registry for all RemoteEvents and RemoteFunctions.
--- Keeps names in one place so client and server always match.
-
+-- Remotes.lua  (Milestone 10 — added PlayerDied)
 local Remotes = {}
 
 local REMOTE_NAMES = {
     -- Vitals
     "VitalsUpdate",
     "StatusUpdate",
+    "PlayerDied",         -- NEW: server → client, carries cause string
 
     -- Inventory & crafting
     "InventoryUpdate",
@@ -25,11 +23,12 @@ local REMOTE_NAMES = {
 
     -- World
     "TimeUpdate",
+    "DayNightUpdate",
 
     -- Structures
     "PlaceCampfireRequest",
     "PlaceBedrollRequest",
-    "PlaceOvenRequest",      -- NEW
+    "PlaceOvenRequest",
 
     -- Sleep
     "SleepRequest",
@@ -45,21 +44,21 @@ local REMOTE_NAMES = {
 
     -- Player
     "RespawnRequest",
+    "UseItem",
 }
 
 function Remotes:init(replicatedStorage)
     local folder = replicatedStorage:FindFirstChild("Remotes")
     if not folder then
         folder = Instance.new("Folder")
-        folder.Name = "Remotes"
+        folder.Name   = "Remotes"
         folder.Parent = replicatedStorage
     end
-
     for _, name in ipairs(REMOTE_NAMES) do
         if not folder:FindFirstChild(name) then
-            local remote = Instance.new("RemoteEvent")
-            remote.Name = name
-            remote.Parent = folder
+            local r = Instance.new("RemoteEvent")
+            r.Name   = name
+            r.Parent = folder
         end
         self[name] = folder:FindFirstChild(name)
     end
