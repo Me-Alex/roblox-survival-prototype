@@ -13,12 +13,13 @@ local terrainState = {
     seed = 42,
     halfSize = 600,
     islandRadius = 540,
-    lavaCoreRadius = 48,
-    lavaRimRadius = 96,
+    lavaCoreRadius = 0,
+    lavaRimRadius = 0,
     beachInnerRadius = 500,
     step = 24,
     oceanFloorY = -160,
     oceanSurfaceY = 0,
+    spawnFlattenRadius = 110,
 }
 
 local function lerp(a, b, t)
@@ -57,18 +58,17 @@ local function surfaceProfileAt(x, z)
     end
 
     local normalized = dist / terrainState.islandRadius
-    local radialHeight = 46 * (1 - normalized ^ 1.35) + 1.2
+    local radialHeight = 24 * (1 - normalized ^ 1.55) + 4
 
-    local n1 = math.noise((x + terrainState.seed * 0.11) / 150, (z - terrainState.seed * 0.17) / 150, terrainState.seed * 0.001)
-    local n2 = math.noise((x - terrainState.seed * 0.29) / 60, (z + terrainState.seed * 0.07) / 60, terrainState.seed * 0.002)
-    local height = radialHeight + n1 * 7 + n2 * 3
+    local n1 = math.noise((x + terrainState.seed * 0.13) / 175, (z - terrainState.seed * 0.19) / 175, terrainState.seed * 0.001)
+    local n2 = math.noise((x - terrainState.seed * 0.27) / 72, (z + terrainState.seed * 0.09) / 72, terrainState.seed * 0.002)
+    local n3 = math.noise((x + terrainState.seed * 0.41) / 34, (z + terrainState.seed * 0.23) / 34, terrainState.seed * 0.003)
+    local height = radialHeight + n1 * 8 + n2 * 4 + n3 * 1.4
 
-    if dist < terrainState.lavaCoreRadius then
-        height = math.min(height, 2.4)
-    elseif dist < terrainState.lavaRimRadius then
-        local rimAlpha = (dist - terrainState.lavaCoreRadius) / (terrainState.lavaRimRadius - terrainState.lavaCoreRadius)
-        local rimHeight = 23 + rimAlpha * 12
-        height = math.max(height, rimHeight + n2 * 1.2)
+    local spawnBlend = 1 - math.clamp(dist / terrainState.spawnFlattenRadius, 0, 1)
+    if spawnBlend > 0 then
+        local flatHeight = 6.2 + n2 * 0.8
+        height = lerp(height, flatHeight, spawnBlend * 0.85)
     end
 
     if dist > terrainState.beachInnerRadius then
@@ -81,17 +81,19 @@ local function surfaceProfileAt(x, z)
         height = math.min(height, beachHeight + n2 * 0.5)
     end
 
-    height = math.clamp(height, 0.35, 58)
+    height = math.clamp(height, 0.35, 46)
 
     local material
-    if dist < terrainState.lavaCoreRadius + 3 then
-        material = Enum.Material.Basalt
-    elseif dist < terrainState.lavaRimRadius then
-        material = Enum.Material.Basalt
-    elseif normalized < 0.55 then
-        material = Enum.Material.Slate
-    elseif normalized < 0.85 then
+    if normalized > 0.90 then
+        material = Enum.Material.Sand
+    elseif height > 28 then
         material = Enum.Material.Rock
+    elseif height > 16 then
+        material = Enum.Material.Slate
+    elseif height < 4.5 then
+        material = Enum.Material.Mud
+    elseif normalized < 0.85 then
+        material = Enum.Material.Grass
     else
         material = Enum.Material.Sand
     end
@@ -104,8 +106,7 @@ local function surfaceProfileAt(x, z)
 end
 
 local function isLavaZone(x, z)
-    local dist = math.sqrt(x * x + z * z)
-    return dist < (terrainState.lavaCoreRadius + 6)
+    return false
 end
 
 local function isInsideIsland(x, z, padding)
@@ -185,9 +186,10 @@ function WorldService:generateTerrain()
     terrainState.seed = worldCfg.seed
     terrainState.halfSize = worldCfg.halfSize
     terrainState.islandRadius = math.max(140, worldCfg.halfSize - 62)
-    terrainState.lavaCoreRadius = math.clamp(terrainState.islandRadius * 0.088, 40, 68)
-    terrainState.lavaRimRadius = math.clamp(terrainState.islandRadius * 0.178, terrainState.lavaCoreRadius + 22, 130)
-    terrainState.beachInnerRadius = math.max(terrainState.lavaRimRadius + 80, terrainState.islandRadius - 36)
+    terrainState.lavaCoreRadius = 0
+    terrainState.lavaRimRadius = 0
+    terrainState.beachInnerRadius = math.max(terrainState.spawnFlattenRadius + 240, terrainState.islandRadius - 44)
+    terrainState.spawnFlattenRadius = math.clamp(terrainState.islandRadius * 0.2, 90, 150)
     terrainState.step = 24
     terrainState.oceanFloorY = -160
     terrainState.oceanSurfaceY = 0
@@ -216,13 +218,6 @@ function WorldService:generateTerrain()
                     profile.material
                 )
 
-                if profile.dist < (terrainState.lavaCoreRadius - 4) then
-                    terrain:FillBlock(
-                        CFrame.new(x, profile.height + 0.6, z),
-                        Vector3.new(terrainState.step, 1.2, terrainState.step),
-                        Enum.Material.Neon
-                    )
-                end
             end
         end
     end
@@ -280,7 +275,7 @@ function WorldService:snapToGround(position, heightOffset, allowLava)
     end
 
     local fallback = self:sampleGroundPosition({
-        minRadius = terrainState.lavaRimRadius + 18,
+        minRadius = 18,
         maxRadius = terrainState.islandRadius - 24,
         attempts = 24,
         excludeLava = true,
@@ -358,9 +353,9 @@ local function reserveGroundPosition(rng, minDist)
     for _ = 1, 80 do
         local pos = WorldService:sampleGroundPosition({
             rng = rng,
-            minRadius = terrainState.lavaRimRadius + 24,
+            minRadius = terrainState.spawnFlattenRadius + 10,
             maxRadius = terrainState.islandRadius - 40,
-            avoidRadius = terrainState.lavaRimRadius + 8,
+            avoidRadius = terrainState.spawnFlattenRadius - 20,
             excludeLava = true,
             minHeight = terrainState.oceanSurfaceY + 0.8,
             attempts = 1,
